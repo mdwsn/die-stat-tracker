@@ -39,6 +39,23 @@ Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.
 `.gitignore` blocks `._*`: macOS leaves these hidden files behind, and they got into the first upload.
 
+## Design system (2026-11-01, "product-grade, not AI-default")
+Vanilla HTML/CSS/JS only (no React/Next). Visual references: shadcn/ui, square-ui's habit-tracker, and
+Circle (a Linear-style UI). The rules, all set as tokens at the top of `app.css`:
+- **Geist** (Google Fonts) for everything; tabular numbers wherever digits line up.
+- **One accent**, indigo `--accent`, used for primary buttons, focus, the active nav item, sorted
+  columns, the MVP card and **Team 1's marker**. Team 2's marker is ink (`--fg`), not a second hue.
+  Green/amber/red are status only (live, game point, behind on throws), never decoration.
+- **4px spacing scale** (`--s1`…`--s10`). **Radius 8px on controls, 12px on cards/sheets.** No pills.
+- Hairline zinc borders and the faintest shadows. **No glow, no gradients, no glassmorphism/blur.**
+- Layout: phone = top bar + bottom tabs; 900px+ = 240px sidebar (group switcher, New game, nav,
+  storage status). `.app.solo` (no group yet) has no sidebar.
+- Dense leaderboard: 40px rows, 13px text, sticky header + sticky player column; awards are compact cards.
+- **Specificity trap (shipped once, caught in preview):** `.btn` sets `display:inline-flex` and sits
+  below the chrome rules, so an unscoped `.side-new{display:none}` loses on order and the sidebar's
+  button leaks onto phones. Hide rules for chrome are scoped `.top .side-new`. Same trap for any
+  component class that also carries `.btn`.
+
 ## Decisions (settled)
 - **Throws are never typed.** Every throw has exactly one outcome (Point/Table/Plink/Plunk/Miss), and
   throws are the sum of those. Total throws is how a house checks everyone got an even share, so it

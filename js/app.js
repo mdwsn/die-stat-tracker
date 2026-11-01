@@ -127,6 +127,7 @@
     $('top').innerHTML = V.top(S);
     $('tabs').innerHTML = S.group ? V.tabs(S) : '';
     $('tabs').hidden = !S.group;
+    $('app').classList.toggle('solo', !S.group);
     var html;
     if (!S.ready) html = '<div class="empty" id="loading"><b>Loading…</b><span>Getting your groups.</span></div>';
     else if (!S.group) html = V.welcome(S);
@@ -167,7 +168,7 @@
   }
   function sheet(title, body) {
     var s = $('sheet');
-    s.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="sheet-h"><h2>' + esc(title) + '</h2><button class="sheet-x" data-act="close" aria-label="Close">×</button></div><div class="stack" id="sheet-body">' + body + '</div></div>';
+    s.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="sheet-h"><h2>' + esc(title) + '</h2><button class="sheet-x" data-act="close" aria-label="Close">' + V.icon('x') + '</button></div><div class="stack" id="sheet-body">' + body + '</div></div>';
     s.hidden = false;
     var fine = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
     var f = s.querySelector('[autofocus]') || (fine ? s.querySelector('.input') : null);
@@ -189,17 +190,17 @@
   function pickResults(q) {
     var list = L.searchPlayers(S.players, q, taken()).slice(0, 30);
     var rows = list.map(function (p) {
-      return '<button class="li" data-act="pick" data-id="' + esc(p.id) + '"><span class="av">' + esc((p.name[0] || '?').toUpperCase()) + '</span><span class="grow name">' + esc(p.name) +
+      return '<button class="li" data-act="pick" data-id="' + esc(p.id) + '">' + V.av(p) + '<span class="grow name">' + esc(p.name) +
         (p.nick ? ' <span class="faint">“' + esc(p.nick) + '”</span>' : '') + '</span>' + (p.pledge ? '<span class="chip pledge">Pledge</span>' : '') + '</button>';
     }).join('');
     var add = '';
     if (q.trim() && S.canWrite) {
       var look = L.lookalikes(S.players, q);
-      if (look.exact) add = '<p class="faint" style="padding:10px 6px">“' + esc(look.exact.name) + '” is already registered' + (taken().indexOf(look.exact.id) >= 0 ? ' and already in this game.' : ' — pick them above.') + '</p>';
-      else add = '<button class="li hit" data-act="pick-new" data-name="' + esc(q.trim()) + '"><span class="av">+</span><span class="grow"><span class="name">Register “' + esc(q.trim()) + '”</span>' +
-        (look.near.length ? '<span class="faint" style="font-size:13px">Check first: ' + look.near.map(function (p) { return esc(p.name); }).join(', ') + '</span>' : '<span class="faint" style="font-size:13px">New player in ' + esc(S.group.name) + '</span>') + '</span></button>';
+      if (look.exact) add = '<p class="note">“' + esc(look.exact.name) + '” is already registered' + (taken().indexOf(look.exact.id) >= 0 ? ' and already in this game.' : '. Pick them above.') + '</p>';
+      else add = '<button class="li hit" data-act="pick-new" data-name="' + esc(q.trim()) + '"><span class="av">' + V.icon('plus') + '</span><span class="grow"><span class="name">Register “' + esc(q.trim()) + '”</span>' +
+        (look.near.length ? '<span class="meta">Check first: ' + look.near.map(function (p) { return esc(p.name); }).join(', ') + '</span>' : '<span class="meta">New player in ' + esc(S.group.name) + '</span>') + '</span></button>';
     }
-    if (!rows && !add) return '<p class="muted" style="padding:10px 6px">' + (S.players.length ? 'Type a name to search.' : 'No players registered yet — type a name to add the first one.') + '</p>';
+    if (!rows && !add) return '<p class="note">' + (S.players.length ? 'Type a name to search.' : 'No players registered yet. Type a name to add the first one.') + '</p>';
     return rows + add;
   }
   function picked(pid) {
@@ -229,7 +230,7 @@
       '<div class="field"><label for="pf-class">Pledge class (optional)</label><input class="input" id="pf-class" name="pledgeClass" maxlength="30" placeholder="e.g. Fall 2026" value="' + esc(p.pledgeClass || '') + '"></div>' +
       '<div id="pf-warn"></div>' +
       '<button class="btn big" type="submit">' + (p.id ? 'Save' : 'Add player') + '</button>' +
-      (p.id ? '<button class="btn ghost" type="button" data-act="archive-player" data-id="' + esc(p.id) + '">' + (p.archived ? 'Restore player' : 'Archive player') + '</button><p class="faint">Archiving hides them from search but keeps every game they played.</p>' : '') +
+      (p.id ? '<button class="btn ghost" type="button" data-act="archive-player" data-id="' + esc(p.id) + '">' + (p.archived ? 'Restore player' : 'Archive player') + '</button><p class="note">Archiving hides them from search but keeps every game they played.</p>' : '') +
       '</form>';
   }
 
@@ -248,10 +249,10 @@
     g.ended = Date.now();
     var recap = L.summarize(g, nameOf);
     sheet(ws.done ? 'Finish game' : 'Finish early?',
-      '<div class="row between"><span class="num a" style="font-size:40px">' + ws.a + '</span><span class="lab">final</span><span class="num b" style="font-size:40px">' + ws.b + '</span></div>' +
+      '<div class="final"><div>' + V.dot(0) + '<span class="num">' + ws.a + '</span></div><span class="lab">Final</span><div><span class="num">' + ws.b + '</span>' + V.dot(1) + '</div></div>' +
       (ws.done ? '' : '<div class="warnbox">Nobody has reached ' + g.rules.target + ' with a ' + g.rules.winBy + '-point lead yet. Finishing now records the score as it stands.</div>') +
       '<span class="lab">Recap</span><p>' + esc(recap) + '</p>' +
-      '<p class="faint">You can still edit this game after finishing — numbers, players, or whether it counted.</p>' +
+      '<p class="note">You can still edit this game after finishing: numbers, players, or whether it counted.</p>' +
       '<button class="btn big" data-act="finish-yes">Finish game</button><button class="btn ghost" data-act="close">Keep playing</button>');
   }
 
@@ -262,9 +263,9 @@
     close: closeSheet,
     'banner-x': function (el) { if (el.dataset.remember) store_set(el.dataset.remember, '1'); banner(''); },
     'switch-group': function () {
-      sheet('Groups', '<div class="list">' + S.groups.map(function (g) {
+      sheet('Groups', '<div class="card list">' + S.groups.map(function (g) {
         return '<button class="li" data-act="pick-group" data-id="' + esc(g.id) + '"><span class="die" aria-hidden="true"></span><span class="grow name">' + esc(g.name) + '</span>' + (g.id === S.gid ? '<span class="chip ok">Open</span>' : '') + '</button>';
-      }).join('') + '</div>' + (S.canWrite ? '<form class="stack" data-form="create-group"><h3>New group</h3><input class="input" name="name" required maxlength="60" placeholder="Group name"><select class="input" name="kind"><option value="house">Fraternity / house</option><option value="friends">Friend group</option><option value="league">League / club</option></select><button class="btn" type="submit">Create group</button></form>' : ''));
+      }).join('') + '</div>' + (S.canWrite ? '<form class="stack" data-form="create-group"><h3>New group</h3><div class="field"><label for="ng-name">Group name</label><input class="input" id="ng-name" name="name" required maxlength="60" placeholder="e.g. Friday league"></div><div class="field"><label for="ng-kind">Type</label><select class="input" id="ng-kind" name="kind"><option value="house">Fraternity / house</option><option value="friends">Friend group</option><option value="league">League / club</option></select></div><button class="btn" type="submit">Create group</button></form>' : ''));
     },
     'pick-group': function (el) { closeSheet(); S.route = 'play'; selectGroup(el.dataset.id); },
 
@@ -331,11 +332,11 @@
     undo: function () { var g = liveGame(); if (!g || !g.log.length) return; L.undo(g); saveGame(g); toast('Last tap undone'); },
     sub: function () {
       var g = liveGame(); if (!g) return;
-      sheet('Who’s coming out?', '<div class="list">' + [0, 1].map(function (ti) {
+      sheet('Who’s coming out?', '<div class="card list">' + [0, 1].map(function (ti) {
         return g.teams[ti].map(function (pid, si) {
-          return '<button class="li" data-act="sub-out" data-t="' + ti + '" data-s="' + si + '"><span class="' + (ti ? 'b' : 'a') + '">●</span><span class="grow name">' + esc(nameOf(pid)) + '</span><span class="faint">' + L.throwsOf(g.stats[pid]) + ' throws</span></button>';
+          return '<button class="li" data-act="sub-out" data-t="' + ti + '" data-s="' + si + '">' + V.dot(ti) + '<span class="grow name">' + esc(nameOf(pid)) + '</span><span class="meta">' + L.throwsOf(g.stats[pid]) + ' throws</span></button>';
         }).join('');
-      }).join('') + '</div><p class="faint">They keep the stats they’ve logged. The sub starts from zero, and both get credit for playing the game.</p>');
+      }).join('') + '</div><p class="note">They keep the stats they’ve logged. The sub starts from zero, and both get credit for playing the game.</p>');
     },
     'sub-out': function (el) { openPicker({ for: 'sub', t: +el.dataset.t, s: +el.dataset.s }, 'Who’s coming in?'); },
     finish: finishSheet,
