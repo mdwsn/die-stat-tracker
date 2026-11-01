@@ -1,4 +1,4 @@
-/* Plunk smoke test — runs the real app in a fake browser (jsdom) and
+/* Dice Tracker smoke test — runs the real app in a fake browser (jsdom) and
    drives it with clicks, the same way a person would.
    Run:  npm install   (once — fetches jsdom)
          npm test       (or: node smoke.js)                             */
@@ -58,6 +58,7 @@ const idsOf = f => (read(f).match(/id="[^"]+"/g) || []).join('|');
 ok(scripts('index.html') === scripts('artifact.html') && scripts('index.html').includes('js/app.js'), 'index.html and artifact.html load the same scripts in the same order');
 ok(idsOf('index.html') === idsOf('artifact.html'), 'and have the same app containers');
 ok(/<meta name="viewport"/.test(read('index.html')) && /^<!doctype html>/i.test(read('index.html')), 'index.html is a complete page with phone sizing');
+ok(/<title>Dice Tracker<\/title>/.test(read('index.html')) && /<title>Dice Tracker<\/title>/.test(read('artifact.html')), 'both pages are named Dice Tracker');
 ok(!/<!doctype|<html[\s>]|<head[\s>]|<body[\s>]/i.test(read('artifact.html')), 'artifact.html stays a bare shell (claude.ai adds the page around it)');
 
 console.log('\n§1 First run');
@@ -111,6 +112,8 @@ click($$('#pick-results [data-act="pick"]').find(b => b.textContent.includes('Ch
 click('[data-act="start-game"]');
 ok(S.view && S.view.kind === 'live' && $('.scorebar'), 'start opens the live table');
 ok($$('.seat').length === 4, 'all four players on screen');
+ok(!/pl[iou]nk/i.test(view()), 'live screen uses plain stat names (no plink/plunk)');
+ok($$('.tap[data-k="sht"]').length === 4 && /Fair hit/.test(view()) && /Short hit/.test(view()), 'every seat has Fair hit and Short hit buttons');
 
 console.log('\n§4 Logging — table mode');
 const J = ids['Jake Miller'], R = ids['Ryan Cole'], M = ids['Matt Price'], C = ids['Chris Diaz'], SAM = ids['Sam Ortiz'];
@@ -122,7 +125,7 @@ ok(live().stats[M].ctc === 1, 'defensive catch recorded');
 click('[data-act="undo"]');
 ok(live().stats[M].ctc === 0 && live().stats[J].mis === 1, 'undo reverses exactly the last tap');
 tap(J, 'snk', 1);
-ok(L.teamScore(live(), 0) === 4, 'a plunk scores the house plunk value');
+ok(L.teamScore(live(), 0) === 4, 'a sink scores the house sink value');
 
 console.log('\n§5 Throw-by-throw mode');
 click('[data-act="live-mode"][data-v="throw"]');
@@ -171,10 +174,11 @@ console.log('     recap: ' + g1.summary);
 console.log('\n§9 Leaderboard');
 click('[data-act="nav"][data-to="board"]');
 const row = id => S.boardRows.find(r => r.pid === id) || S.allRows[id];
-ok(row(J).thr === 9 && row(J).w === 1, 'Jake: 9 throws (3+2 points, 2 table, 1 miss, 1 plunk), 1 win', { thr: row(J).thr, w: row(J).w });
+ok(row(J).thr === 9 && row(J).w === 1, 'Jake: 9 throws (5 points, 2 fair hits, 1 miss, 1 sink), 1 win', { thr: row(J).thr, w: row(J).w });
 ok(row(R).gp === 1 && row(R).w === 1 && row(SAM).w === 1, 'subbed-out and subbed-in players both credited');
 ok(row(M).l === 1, 'losers get the loss');
 ok($('table.stats') && /Throws/.test($('table.stats').textContent), 'board shows a Throws column');
+ok(!/pl[iou]nk/i.test(view()) && /Fair table/.test(view()) && /Short table/.test(view()), 'leaderboard uses the house stat names');
 ok(row(M).pledgeLine.gp === 1, 'Matt’s game counts in his pledge split');
 
 console.log('\n§10 Editing a finished game');
@@ -251,6 +255,20 @@ const w2 = await boot(saved);
 const S2 = w2.PLUNK.app.S;
 ok(S2.group && S2.group.name === 'Alpha House' && S2.players.length === 7 && S2.games.length === 1, 'reopening restores the group, players and games',
   { group: S2.group && S2.group.name, players: S2.players.length, games: S2.games.length });
+
+console.log('\n§16 Fair and short table hits');
+const fg = L.newGame({ teams: [[J, R], [M, C]] });
+[['pt'], ['tbl'], ['sht'], ['mis']].forEach(k => L.record(fg, [[J, k[0], 1]], false));
+ok(L.throwsOf(fg.stats[J]) === 4, 'a short table hit counts as a throw');
+ok(L.hitsOf(fg.stats[J]) === 2, 'but not as a hit (hit rate counts fair hits, cup hits and sinks)');
+ok(L.fairOf(fg.stats[J]) === 2, 'fair table hits include the one that scored');
+ok(L.teamScore(fg, 0) === 1, 'only the point scores');
+fg.status = 'final';
+const fr = L.leaderboard([fg], S.players, 'all').find(r => r.pid === J);
+ok(fr.fair === 2 && fr.short === 1, 'the leaderboard carries fair and short table hits', { fair: fr.fair, short: fr.short });
+const zero = L.newGame({ teams: [[J, R], [M, C]], rules: { plunkPts: 0 } });
+zero.stats[J].snk = 2;
+ok(L.teamScore(zero, 0) === 0, 'a sink set to be worth 0 really scores 0');
 
 console.log('\n' + (fail ? 'SOME CHECKS FAILED' : 'ALL SMOKE TESTS PASSED') + ` — ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -1,4 +1,4 @@
-# Plunk
+# Dice Tracker
 
 A stat tracker for **die**, the dice table game. Make a group for your house or your friends, register
 players once, and log games from any phone. Leaderboards, awards and a two-sentence recap of every game
@@ -10,6 +10,8 @@ fill in on their own.
   near-duplicate names ("Jake" vs "Jaek") are caught before they become two people.
 - **Two ways to log.** *All four* shows the whole table with every player's buttons. *Throw by throw*
   shows one thrower at a time in order, and a single tap records the throw plus any catch or drop.
+- **The stat sheet:** throws, points, fair table hits, short table hits, cup hits, sinks and misses,
+  plus catches and drops when defense is tracked.
 - **Total throws are automatic.** Every outcome counts as a throw, so everyone's throw count is always
   right, and the live game flags anyone who's behind.
 - **Defense is optional.** Turn catches and drops off for any game, even halfway through.
@@ -20,7 +22,7 @@ fill in on their own.
 - **Pledge tracking.** Tag pledges by class. Games they played as pledges stay tagged after
   initiation, and profiles show pledge-era stats separately.
 - **Leaderboard and awards.** Sort by any stat and filter by season, last 30 days or all time. Awards:
-  MVP, Defensive Player, Sniper, Plunk King, Iron Man, Top Pledge, Best Duo.
+  MVP, Defensive Player, Sniper, Most Sinks, Iron Man, Top Pledge, Best Duo.
 
 ## Where games are saved
 
@@ -47,9 +49,9 @@ There's no build step. The files are served exactly as they are.
 
 Everything tracked is defined in [`js/config.js`](js/config.js):
 
-- `OUTCOMES`: what a throw can do (Point, Table, Plink, Plunk, Miss).
+- `OUTCOMES`: what a throw can do (Point, Fair hit, Short hit, Cup hit, Sink, Miss).
 - `DEFENSE`: defensive plays (Catch, Drop).
-- `DEFAULT_RULES`: target score, win-by, what a plunk is worth. Each group can also change these in the app.
+- `DEFAULT_RULES`: target score, win-by, what a sink is worth. Each group can also change these in the app.
 - Award thresholds: minimum games, minimum throws.
 
 Add a stat by adding a row. **Never rename a stat's `k` key once games exist**, because old games would

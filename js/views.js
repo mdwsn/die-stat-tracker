@@ -31,7 +31,7 @@
     repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
     star: '<path d="m12 3.5 2.5 5.3 5.8.7-4.3 4 1.1 5.8L12 16.4l-5.1 2.9 1.1-5.8-4.3-4 5.8-.7z"/>'
   };
-  var AWARD_ICON = { mvp: 'trophy', dpoy: 'shield', sniper: 'crosshair', plunk: 'target', iron: 'repeat', pledge: 'star', duo: 'players' };
+  var AWARD_ICON = { mvp: 'trophy', dpoy: 'shield', sniper: 'crosshair', sinks: 'target', iron: 'repeat', pledge: 'star', duo: 'players' };
   /* [route, sidebar label, phone tab label] */
   var TABS = [['play', 'Play', 'Play'], ['board', 'Leaderboard', 'Board'], ['games', 'Games', 'Games'], ['players', 'Players', 'Players'], ['group', 'House', 'House']];
 
@@ -109,7 +109,7 @@
     var live = S.games.filter(function (g) { return g.status === 'live'; });
     var recent = S.games.filter(function (g) { return g.status === 'final'; }).slice(0, 3);
     var r = S.rules;
-    var out = pageHead('Play', 'First to ' + r.target + ', win by ' + r.winBy + (Number(r.plunkPts) !== 1 ? ' · a plunk is worth ' + r.plunkPts : ''));
+    var out = pageHead('Play', 'First to ' + r.target + ', win by ' + r.winBy + (Number(r.plunkPts) !== 1 ? ' · a sink is worth ' + r.plunkPts : ''));
     if (live.length) out += '<section class="section"><div class="section-h"><h2>Live now</h2></div><div class="games-list">' + live.map(function (g) { return gameCard(S, g); }).join('') + '</div></section>';
     out += newGamePanel(S, S.draft);
     if (recent.length) out += '<section class="section"><div class="section-h"><h2>Recent games</h2><button class="link" data-act="nav" data-to="games">View all</button></div><div class="games-list">' + recent.map(function (g) { return gameCard(S, g); }).join('') + '</div></section>';
@@ -192,11 +192,11 @@
       var pid = g.teams[ti][si], st = g.stats[pid] || L.blankStats(), gap = gaps[pid] || 0;
       var taps = P.OUTCOMES.map(function (o) {
         return '<button class="tap' + (o.points ? ' score' : '') + '" data-act="tap" data-p="' + esc(pid) + '" data-k="' + o.k + '" title="' + esc(o.hint) + '">' +
-          '<span class="n">' + (st[o.k] || 0) + '</span><span class="l">' + esc(o.label) + '</span></button>';
+          '<span class="n">' + (st[o.k] || 0) + '</span><span class="l">' + esc(o.tap) + '</span></button>';
       }).join('');
       var def = g.defense ? '<div class="def-row"><span class="lab">Defense</span><div class="taps">' + P.DEFENSE.map(function (d) {
         return '<button class="tap def" data-act="tap" data-p="' + esc(pid) + '" data-k="' + d.k + '" title="' + esc(d.hint) + '">' +
-          '<span class="n">' + (st[d.k] || 0) + '</span><span class="l">' + esc(d.label) + '</span></button>';
+          '<span class="n">' + (st[d.k] || 0) + '</span><span class="l">' + esc(d.tap) + '</span></button>';
       }).join('') + '</div></div>' : '';
       return '<div class="seat"><div class="seat-h">' + dot(ti) + '<span class="nm">' + esc(nameOf(S, pid)) + '</span>' +
         '<span class="thr' + (gap > P.EVEN_TOLERANCE ? ' behind' : '') + '">' + L.throwsOf(st) + ' thr</span></div>' +
@@ -216,13 +216,13 @@
       return '<button class="out ' + (cls || '') + '" data-act="throw" data-items="' + esc(JSON.stringify(items)) + '"><b>' + label + '</b><small>' + small + '</small></button>';
     }
     var o = [];
-    o.push(out('Point', 'Hit the table and scored', [[pid, 'pt']], 'score'));
-    if (g.defense) defTeam.forEach(function (d) { o.push(out('Point, ' + esc(nameOf(S, d)) + ' dropped', 'Scores and counts a drop', [[pid, 'pt'], [d, 'drp']], 'def drop')); });
-    o.push(out('Table', 'Hit, no point', [[pid, 'tbl']]));
-    if (g.defense) defTeam.forEach(function (d) { o.push(out('Caught by ' + esc(nameOf(S, d)), 'Table hit and counts a catch', [[pid, 'tbl'], [d, 'ctc']], 'def')); });
-    o.push(out('Plink', 'Hit a cup', [[pid, 'plk']]));
-    o.push(out('Plunk', 'In the cup, ' + L.plural(Number(g.rules.plunkPts), 'point'), [[pid, 'snk']], 'score'));
-    o.push(out('Miss', 'Off the table', [[pid, 'mis']], 'miss'));
+    P.OUTCOMES.forEach(function (x) {
+      var cls = x.points ? 'score' : x.hit ? '' : 'miss';
+      var sub = x.points === 'sink' ? x.hint + ', ' + L.plural(Number(g.rules.plunkPts), 'point') : x.hint;
+      o.push(out(esc(x.tap), esc(sub), [[pid, x.k]], cls));
+      if (g.defense && x.k === 'pt') defTeam.forEach(function (d) { o.push(out(esc(x.tap) + ', ' + esc(nameOf(S, d)) + ' dropped', 'Scores and counts a drop', [[pid, 'pt'], [d, 'drp']], 'def drop')); });
+      if (g.defense && x.k === 'tbl') defTeam.forEach(function (d) { o.push(out('Caught by ' + esc(nameOf(S, d)), esc(x.tap) + ', counts a catch', [[pid, 'tbl'], [d, 'ctc']], 'def')); });
+    });
     return '<section class="card pad up-card">' +
       '<div class="stack tight"><span class="lab">Throwing order · tap a name to change who’s up</span><div class="order">' + order + '</div></div>' +
       '<div class="thrower">' + dot(ti) + '<span class="nm">' + esc(nameOf(S, pid)) + '</span>' +
@@ -247,14 +247,21 @@
       '</section>';
     return head + score + '<section class="section"><div class="section-h"><h2>Box score</h2></div>' + boxScore(S, g) + '</section>';
   };
+  /* long column names break onto two lines so a dense table stays narrow */
+  function hdr(t) {
+    if (t.length <= 10 || t.indexOf(' ') < 0) return esc(t);
+    var i = t.lastIndexOf(' ');
+    return esc(t.slice(0, i)) + '<br>' + esc(t.slice(i + 1));
+  }
   function boxScore(S, g) {
-    var cols = P.OUTCOMES.concat(g.defense ? P.DEFENSE : []);
-    var head = '<tr><th class="pl">Player</th><th>Throws</th><th>Hit%</th>' + cols.map(function (c) { return '<th title="' + esc(c.label) + '">' + c.short + '</th>'; }).join('') + '</tr>';
+    var cols = P.OUTCOMES.filter(function (o) { return !o.fair; }).concat(g.defense ? P.DEFENSE : []);
+    var head = '<tr><th class="pl">Player</th><th>Throws</th><th>Hit%</th><th>PTS</th><th title="Fair table hits, the ones that scored included">' + hdr('Fair table hits') + '</th>' +
+      cols.map(function (c) { return '<th title="' + esc(c.hint) + '">' + hdr(c.col) + '</th>'; }).join('') + '</tr>';
     var rows = [0, 1].map(function (ti) {
       return g.appeared[ti].map(function (pid) {
         var st = g.stats[pid] || {}, thr = L.throwsOf(st);
         return '<tr><td class="pl"><button data-act="open-player" data-id="' + esc(pid) + '">' + dot(ti) + '<span class="nm">' + esc(nameOf(S, pid)) + '</span></button></td>' +
-          '<td class="hl">' + thr + '</td><td>' + L.fmtPct(thr ? L.hitsOf(st) / thr : null) + '</td>' +
+          '<td class="hl">' + thr + '</td><td>' + L.fmtPct(thr ? L.hitsOf(st) / thr : null) + '</td><td>' + L.pointsOf(st, g.rules) + '</td><td>' + L.fairOf(st) + '</td>' +
           cols.map(function (c) { return '<td>' + (st[c.k] || 0) + '</td>'; }).join('') + '</tr>';
       }).join('');
     }).join('');
@@ -267,9 +274,9 @@
       return g.appeared[ti].map(function (pid) {
         var st = g.stats[pid] || {};
         var steps = P.OUTCOMES.concat(g.defense ? P.DEFENSE : []).map(function (c) {
-          return '<div class="step"><button data-act="ed-step" data-p="' + esc(pid) + '" data-k="' + c.k + '" data-d="-1" aria-label="One less ' + esc(c.label) + '">−</button>' +
-            '<div><span class="n">' + (st[c.k] || 0) + '</span><span class="l">' + esc(c.label) + '</span></div>' +
-            '<button data-act="ed-step" data-p="' + esc(pid) + '" data-k="' + c.k + '" data-d="1" aria-label="One more ' + esc(c.label) + '">+</button></div>';
+          return '<div class="step"><button data-act="ed-step" data-p="' + esc(pid) + '" data-k="' + c.k + '" data-d="-1" aria-label="One less ' + esc(c.tap) + '">−</button>' +
+            '<div><span class="n">' + (st[c.k] || 0) + '</span><span class="l">' + esc(c.tap) + '</span></div>' +
+            '<button data-act="ed-step" data-p="' + esc(pid) + '" data-k="' + c.k + '" data-d="1" aria-label="One more ' + esc(c.tap) + '">+</button></div>';
         }).join('');
         return '<section class="card pad ed-player"><div class="row between"><span class="who">' + dot(ti) + esc(nameOf(S, pid)) + '</span>' +
           '<span class="row"><span class="lab">' + L.throwsOf(st) + ' throws</span><button class="btn sm ghost" data-act="ed-replace" data-p="' + esc(pid) + '">Wrong person?</button></span></div>' +
@@ -285,7 +292,7 @@
     return '<div class="edit-h"><button class="btn sm ghost" data-act="ed-cancel">Cancel</button><h1>Edit game</h1><button class="btn sm" data-act="ed-save">Save</button></div>' +
       '<section class="card pad stack"><div class="row between"><h2>Score</h2>' +
       '<span class="num score-inline">' + dot(0) + ' ' + L.teamScore(g, 0) + ' – ' + L.teamScore(g, 1) + ' ' + dot(1) + '</span></div>' +
-      '<p class="note">The score adds up from points and plunks. Use the adjustments only for anything your house scores outside the stat sheet.</p>' +
+      '<p class="note">The score adds up from points and sinks. Use the adjustments only for anything your house scores outside the stat sheet.</p>' +
       '<div class="steps">' + adj(0) + adj(1) + '</div>' +
       '<label class="check"><input type="checkbox" data-change="ed-def"' + (g.defense ? ' checked' : '') + '> This game tracked catches &amp; drops</label>' +
       '<div class="field"><label for="ed-date">Played on</label><input class="input" type="datetime-local" id="ed-date" data-change="ed-date" value="' + esc(localInput(g.started || g.created)) + '"></div>' +
@@ -322,13 +329,15 @@
     { k: 'w', t: 'W–L', title: 'Wins', f: function (r) { return r.w + '–' + r.l; }, sort: 'w' },
     { k: 'winPct', t: 'Win%', title: 'Win rate', f: function (r) { return L.fmtPct(r.winPct); } },
     { k: 'thr', t: 'Throws', title: 'Throws', f: function (r) { return r.thr; }, g: 1 },
-    { k: 'hitPct', t: 'Hit%', title: 'Hit rate', f: function (r) { return L.fmtPct(r.hitPct); } },
     { k: 'pts', t: 'PTS', title: 'Points', f: function (r) { return r.pts; } },
     { k: 'ppg', t: 'PPG', title: 'Points per game', f: function (r) { return L.fmt1(r.ppg); } },
-    { k: 'plk', t: 'PLK', title: 'Plinks', f: function (r) { return r.s.plk; }, v: function (r) { return r.s.plk; } },
-    { k: 'snk', t: 'Plunks', title: 'Plunks', f: function (r) { return r.s.snk; }, v: function (r) { return r.s.snk; } },
-    { k: 'ctc', t: 'CTC', title: 'Catches', f: function (r) { return r.s.ctc; }, v: function (r) { return r.s.ctc; }, g: 1, def: 1 },
-    { k: 'drp', t: 'DRP', title: 'Drops', f: function (r) { return r.s.drp; }, v: function (r) { return r.s.drp; }, def: 1 },
+    { k: 'fair', t: 'Fair table<br>hits', title: 'Fair table hits, the ones that scored included', f: function (r) { return r.fair; }, g: 1 },
+    { k: 'short', t: 'Short table<br>hits', title: 'Short table hits', f: function (r) { return r.short; } },
+    { k: 'hitPct', t: 'Hit%', title: 'Hit rate: fair table hits, cup hits and sinks out of all throws', f: function (r) { return L.fmtPct(r.hitPct); } },
+    { k: 'plk', t: 'Cup hits', title: 'Cup hits', f: function (r) { return r.s.plk; }, v: function (r) { return r.s.plk; } },
+    { k: 'snk', t: 'Sinks', title: 'Sinks', f: function (r) { return r.s.snk; }, v: function (r) { return r.s.snk; } },
+    { k: 'ctc', t: 'Catches', title: 'Catches', f: function (r) { return r.s.ctc; }, v: function (r) { return r.s.ctc; }, g: 1, def: 1 },
+    { k: 'drp', t: 'Drops', title: 'Drops', f: function (r) { return r.s.drp; }, v: function (r) { return r.s.drp; }, def: 1 },
     { k: 'catchPct', t: 'Catch%', title: 'Catch rate', f: function (r) { return L.fmtPct(r.catchPct); }, def: 1 },
     { k: 'impact', t: 'Impact', title: 'Impact per game', f: function (r) { return L.fmt1(r.impact); }, g: 1 }
   ];
@@ -404,7 +413,8 @@
     function kpi(label, val) { return '<div class="kpi"><span class="lab">' + label + '</span><span class="num">' + val + '</span></div>'; }
     var k = r && r.gp
       ? '<div class="kpis">' + kpi('Record', r.w + '–' + r.l) + kpi('Win rate', L.fmtPct(r.winPct)) + kpi('Throws', r.thr) +
-        kpi('Hit rate', L.fmtPct(r.hitPct)) + kpi('Points', r.pts) + kpi('Per game', L.fmt1(r.ppg)) + kpi('Plunks', r.s.snk) +
+        kpi('Fair table hits', r.fair) + kpi('Short table hits', r.short) + kpi('Hit rate', L.fmtPct(r.hitPct)) +
+        kpi('Points', r.pts) + kpi('Per game', L.fmt1(r.ppg)) + kpi('Cup hits', r.s.plk) + kpi('Sinks', r.s.snk) +
         (r.defGp ? kpi('Catches', r.s.ctc) + kpi('Drops', r.s.drp) + kpi('Catch rate', L.fmtPct(r.catchPct)) : '') + kpi('Impact', L.fmt1(r.impact)) + '</div>'
       : '<div class="empty"><b>No finished games yet</b><span>Stats appear after their first finished game.</span></div>';
     var split = pl && pl.gp && pl.gp < r.gp
@@ -460,7 +470,7 @@
     return pageHead(esc(g.name), 'House rules, pledge class and who can log games') +
       '<div class="split">' +
       '<form class="card pad stack" data-form="rules"><div class="hgroup"><h2>House rules</h2><p class="sub">New games use these. Finished games keep the rules they were played under.</p></div>' +
-      '<div class="grid3">' + num('target', 'Play to', r.target, 1, 50) + num('winBy', 'Win by', r.winBy, 1, 5) + num('plunkPts', 'Plunk worth', r.plunkPts, 0, 10) + '</div>' +
+      '<div class="grid3">' + num('target', 'Play to', r.target, 1, 50) + num('winBy', 'Win by', r.winBy, 1, 5) + num('plunkPts', 'Sink worth', r.plunkPts, 0, 10) + '</div>' +
       '<label class="check"><input type="checkbox" name="defense"' + (r.defense ? ' checked' : '') + dis + '> New games track catches &amp; drops</label>' +
       '<div class="field"><label for="gname">Group name</label><input class="input" id="gname" name="name" maxlength="60" value="' + esc(g.name) + '"' + dis + '></div>' +
       (S.canWrite ? '<div><button class="btn" type="submit">Save rules</button></div>' : '') + '</form>' +

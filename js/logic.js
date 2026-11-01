@@ -36,13 +36,19 @@
   function throwsOf(s) { s = s || {}; return OUT_KEYS.reduce(function (n, k) { return n + (s[k] || 0); }, 0); }
   function hitsOf(s) {
     s = s || {};
-    return P.OUTCOMES.reduce(function (n, o) { return n + (o.onTable ? (s[o.k] || 0) : 0); }, 0);
+    return P.OUTCOMES.reduce(function (n, o) { return n + (o.hit ? (s[o.k] || 0) : 0); }, 0);
+  }
+  /* "Fair table hits": every fair landing, the ones that scored included */
+  function fairOf(s) {
+    s = s || {};
+    return P.OUTCOMES.reduce(function (n, o) { return n + (o.fair ? (s[o.k] || 0) : 0); }, 0);
   }
   function pointsOf(s, rules) {
     s = s || {}; rules = rules || P.DEFAULT_RULES;
     return P.OUTCOMES.reduce(function (n, o) {
       if (!o.points) return n;
-      var each = o.points === 'plunk' ? Number(rules.plunkPts || 1) : o.points;
+      // a sink is worth the house value; 0 is a real setting, so only a missing value falls back to 1
+      var each = o.points === 'sink' ? Number(rules.plunkPts != null ? rules.plunkPts : 1) : o.points;
       return n + each * (s[o.k] || 0);
     }, 0);
   }
@@ -183,7 +189,7 @@
     var st = g.stats[star], th = throwsOf(st);
     var s2 = nameOf(star) + ' led the table with ' + plural(pointsOf(st, r), 'point') +
       ' on ' + Math.round(hitsOf(st) / Math.max(1, th) * 100) + '% hitting';
-    if (st.snk) s2 += ', including ' + plural(st.snk, 'plunk');
+    if (st.snk) s2 += ', including ' + plural(st.snk, 'sink');
     if (g.defense) {
       var glove = everyone.slice().sort(function (x, y) { return (g.stats[y].ctc || 0) - (g.stats[x].ctc || 0); })[0];
       var c = g.stats[glove].ctc || 0;
@@ -224,6 +230,7 @@
   function derive(line) {
     var s = line.s, thr = throwsOf(s), hits = hitsOf(s), chances = s.ctc + s.drp;
     line.thr = thr; line.hits = hits;
+    line.fair = fairOf(s); line.short = s.sht || 0;
     line.hitPct = thr ? hits / thr : null;
     line.winPct = line.gp ? line.w / line.gp : null;
     line.ppg = line.gp ? line.pts / line.gp : null;
@@ -290,8 +297,8 @@
     if (dpoy) out.push({ key: 'dpoy', title: 'Defensive Player', pids: [dpoy.pid], value: fmtPct(dpoy.catchPct) + ' catch rate', note: 'Most catches minus drops per game tracked' });
     var sn = best(q.filter(function (r) { return r.thr >= P.MIN_THROWS; }), 'hitPct', 'thr');
     if (sn) out.push({ key: 'sniper', title: 'Sniper', pids: [sn.pid], value: fmtPct(sn.hitPct) + ' on the table', note: 'Best hit rate, ' + P.MIN_THROWS + '+ throws' });
-    var pk = best(rows.filter(function (r) { return r.s.snk > 0; }).map(function (r) { return Object.assign({}, r, { plunks: r.s.snk }); }), 'plunks', 'gp');
-    if (pk) out.push({ key: 'plunk', title: 'Plunk King', pids: [pk.pid], value: plural(pk.plunks, 'plunk'), note: 'Most dice in the cup' });
+    var sk = best(rows.filter(function (r) { return r.s.snk > 0; }).map(function (r) { return Object.assign({}, r, { sinks: r.s.snk }); }), 'sinks', 'gp');
+    if (sk) out.push({ key: 'sinks', title: 'Most Sinks', pids: [sk.pid], value: plural(sk.sinks, 'sink'), note: 'Most dice in the cup' });
     var im = best(rows.filter(function (r) { return r.gp > 0; }), 'gp', 'winPct');
     if (im) out.push({ key: 'iron', title: 'Iron Man', pids: [im.pid], value: plural(im.gp, 'game'), note: 'Most games played' });
     var pl = best(rows.filter(function (r) { return r.pledgeLine.gp >= P.MIN_GAMES; }).map(function (r) {
@@ -372,7 +379,7 @@
   P.logic = {
     OUT_KEYS: OUT_KEYS, DEF_KEYS: DEF_KEYS, ALL_KEYS: ALL_KEYS,
     uid: uid, esc: esc, pct: pct, fmtPct: fmtPct, fmt1: fmt1, plural: plural, joinNames: joinNames,
-    blankStats: blankStats, throwsOf: throwsOf, hitsOf: hitsOf, pointsOf: pointsOf,
+    blankStats: blankStats, throwsOf: throwsOf, hitsOf: hitsOf, fairOf: fairOf, pointsOf: pointsOf,
     newGame: newGame, teamScore: teamScore, winnerOf: winnerOf, winState: winState,
     throwOrder: throwOrder, thrower: thrower, teamOf: teamOf,
     record: record, undo: undo, substitute: substitute, replacePlayer: replacePlayer, throwGaps: throwGaps,

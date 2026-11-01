@@ -1,5 +1,5 @@
 {
-  "name": "plunk",
+  "name": "dice-tracker",
   "version": "1.0.0",
   "description": "Stat tracker for die, the dice table game: leaderboards, awards and game recaps for houses and friend groups.",
   "private": true,

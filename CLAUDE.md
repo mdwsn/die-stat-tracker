@@ -1,4 +1,4 @@
-# CLAUDE.md — Plunk (die stat tracker)
+# CLAUDE.md — Dice Tracker (die stat tracker)
 
 **This folder is the project: a git clone of https://github.com/mdwsn/die-stat-tracker, branch `main`.**
 It is the only copy to edit. An older working copy at `~/Downloads/Movetoclaudecode/plunk/` predates the
@@ -57,7 +57,16 @@ Circle (a Linear-style UI). The rules, all set as tokens at the top of `app.css`
   component class that also carries `.btn`.
 
 ## Decisions (settled)
-- **Throws are never typed.** Every throw has exactly one outcome (Point/Table/Plink/Plunk/Miss), and
+- **Names (2026-11-01):** the app is **Dice Tracker**, and stats are named in plain words the way the
+  house sheet phrases them ("Fair Table Hits", "Short Table Hits"). **Never "plink"/"plunk"/"plonk"**:
+  the maintainer called them cringy. Cup hit and Sink instead. Internal names are historical and stay:
+  the `PLUNK` namespace, `plunk.*` storage keys, `rules.plunkPts` (= what a sink is worth), and the
+  stat keys `plk` (cup hit) and `snk` (sink). Renaming those would orphan saved data.
+- **Fair table hits include points.** A point is a fair table hit that scored, so the column is
+  Point + Fair hit. Short table hits count as throws but not hits, and Hit % = (fair + cup hits +
+  sinks) / throws. If the house sheet counts them differently, change the `fair`/`hit` flags in
+  `config.js`; nothing else needs to move.
+- **Throws are never typed.** Every throw has exactly one outcome (Point/Fair hit/Short hit/Cup hit/Sink/Miss), and
   throws are the sum of those. Total throws is how a house checks everyone got an even share, so it
   must not be able to drift.
 - **Defense is optional per game** and can be collapsed mid-game without losing logged catches/drops.
