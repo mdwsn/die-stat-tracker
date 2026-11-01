@@ -1,9 +1,18 @@
 # CLAUDE.md — Plunk (die stat tracker)
 
-**This folder is its own project and its own GitHub repo.** It sits inside the Command Center folder,
-but Command Center's rules in `../CLAUDE.md` (its schema, its design history, its checks) do **not**
-apply here. One thing does carry over: the maintainer doesn't code. Explain every command in plain
-English and say whether it changes anything or only reads.
+**This folder is the project: a git clone of https://github.com/mdwsn/die-stat-tracker, branch `main`.**
+It is the only copy to edit. An older working copy at `~/Downloads/Movetoclaudecode/plunk/` predates the
+repo; don't edit it. `~/Downloads/CLAUDE.md` also loads here because it sits in the parent folder.
+That file is a retired pointer about a different app (Command Center) and doesn't apply to this one.
+
+The maintainer doesn't code. Explain every command in plain English and say whether it changes anything
+or only reads.
+
+## Workflow (the maintainer's standing instruction)
+**When a round of changes is finished: run the tests, then commit and push to GitHub** (`origin main`).
+Don't leave finished work sitting uncommitted. Commit messages say what changed in plain English.
+Push with `GIT_TERMINAL_PROMPT=0`, so a missing sign-in fails fast instead of hanging. Git signs in
+through the macOS keychain (`osxkeychain`).
 
 ## What it is
 A stat tracker for die (the dice table game), for frat houses and friend groups. The person keeping
@@ -25,7 +34,10 @@ fixable. The README covers the user-facing feature list.
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
 read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 60 checks).
-Node may be at `~/.local/node/bin` rather than on PATH.
+Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
+`node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
+`NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.
+`.gitignore` blocks `._*`: macOS leaves these hidden files behind, and they got into the first upload.
 
 ## Decisions (settled)
 - **Throws are never typed.** Every throw has exactly one outcome (Point/Table/Plink/Plunk/Miss), and
