@@ -1,0 +1,12 @@
+{
+  "name": "plunk",
+  "version": "1.0.0",
+  "description": "Stat tracker for die, the dice table game: leaderboards, awards and game recaps for houses and friend groups.",
+  "private": true,
+  "scripts": {
+    "test": "node smoke.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.0"
+  }
+}

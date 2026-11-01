@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plunk</title>
+<meta name="description" content="Stat tracker for die, the dice table game. Leaderboards, awards and game recaps for houses and friend groups.">
+<meta name="theme-color" content="#eef1f4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Plunk">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!--
+  Plunk — stat tracker for die (the dice table game).
+  This is the page for ordinary web hosting (GitHub Pages, any static host).
+  artifact.html is the same app's page for claude.ai — keep the two in step
+  (smoke.js checks they load the same scripts).
+
+  Everything is drawn by the scripts below:
+    js/config.js  what gets tracked (edit this to change the stats)
+    js/logic.js   scoring, leaderboard, awards, summaries — pure math, no screen
+    js/store.js   where data lives (shared database on claude.ai, or this device)
+    js/views.js   every screen, as HTML built from data
+    js/app.js     taps, forms, navigation, boot
+-->
+
+<div id="app" class="app">
+  <header class="top" id="top"></header>
+  <div id="banner" class="banner" hidden></div>
+  <main id="view" class="view" aria-live="polite"></main>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+</div>
+<div id="sheet" class="sheet-wrap" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="js/config.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/store.js"></script>
+<script src="js/views.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
