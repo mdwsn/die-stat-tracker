@@ -213,6 +213,13 @@ details > summary { cursor: pointer; width: fit-content; }
 .invite { padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--subtle); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; user-select: all; }
 .code { letter-spacing: .08em; color: var(--fg); }
 .side-foot.offline .dot { background: var(--warn); }
+.me-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; max-width: 40%; padding: 0 var(--s2); margin-left: auto;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--panel); font-size: 13px; font-weight: 500; color: var(--fg-2);
+}
+.me-btn span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-btn ~ .sync-pill, .me-btn ~ .top-new { margin-left: var(--s2); }
+@media (min-width: 900px) { .app:not(.solo) .me-btn { margin: 0 0 var(--s2); max-width: none; justify-content: flex-start; order: 3; } }
 .sync-pill {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 var(--s2);
   border-radius: var(--r-sm); background: var(--warn-subtle); color: var(--warn); font-size: 12px; font-weight: 500; white-space: nowrap;

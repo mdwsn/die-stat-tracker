@@ -57,7 +57,10 @@ Your Mac's keychain remembers the token from now on, so Claude can upload future
    *Why:* Supabase's built-in email only reaches people on your Supabase team, so confirmation emails
    would never get to the brothers. With confirmation off, people sign up with an email and password
    and they're in.
-2. Go to **Authentication → URL Configuration**:
+2. On the same page (**Sign In / Providers**), turn on **Allow anonymous sign-ins**. That powers
+   **Continue without email**: brothers open the invite link, tap once, and pick their name. No account
+   needed. The invite link is still the only way into a house.
+3. Go to **Authentication → URL Configuration**:
    - **Site URL:** `https://mdwsn.github.io/die-stat-tracker/`
    - **Redirect URLs:** add `https://mdwsn.github.io/die-stat-tracker/**`
    - Press **Save**.

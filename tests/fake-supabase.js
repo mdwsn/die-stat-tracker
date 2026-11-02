@@ -67,6 +67,13 @@ function client(srv) {
       session = { user: srv.users[id].user }; emit('SIGNED_IN');
       return reply({ user: session.user, session });
     },
+    signInAnonymously() {
+      if (srv.offline) return reply(null, NET);
+      const user = { id: 'u' + (++srv.n), email: '', is_anonymous: true };
+      srv.users[user.id] = { user, password: null };
+      session = { user }; emit('SIGNED_IN');
+      return reply({ user, session });
+    },
     signOut() { session = null; emit('SIGNED_OUT'); return reply({}); },
     signInWithOAuth() { return reply({}); }
   };

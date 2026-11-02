@@ -373,6 +373,30 @@ ok(!againPlan.players.length && !againPlan.games.length, 'restoring the same fil
 let refused = false; try { P.app.planImport({ hello: 1 }); } catch (e) { refused = true; }
 ok(refused, 'a file that isn’t a backup is refused');
 
+console.log('\n§20 Pick who you are (no email)');
+const keep = {}; for (let i = 0; i < w.localStorage.length; i++) { const k = w.localStorage.key(i); keep[k] = w.localStorage.getItem(k); }
+Object.keys(keep).filter(k => k.startsWith('plunk.me.') || k.startsWith('plunk.watcher.')).forEach(k => delete keep[k]);
+const P3 = ui(await boot(keep));
+await settle();
+ok(!P3.q('#sheet').hidden && /Who are you\?/.test(P3.q('#sheet').textContent), 'a phone that hasn’t picked yet is asked who it is');
+P3.type('#who-q', 'jake');
+const jakeBtn = P3.qa('#who-list [data-act="i-am"]').find(b => /Jake Miller/.test(b.textContent));
+P3.click(jakeBtn);
+ok(P3.S.mePid === jakeBtn.dataset.id && /Jake Miller/.test(P3.q('.me-btn').textContent), 'tapping your name signs you in as you; the You button shows it');
+ok(P3.S.claimedPid === P3.S.mePid, 'and new games default to you as stats-keeper');
+P3.click('[data-act="switch-me"]');
+P3.submit('form[data-form="whoami"]', { name: 'jake miller' });
+ok(/already here/.test(P3.q('#who-warn').textContent), 'registering a name that’s taken points you to it instead');
+P3.submit('form[data-form="whoami"]', { name: 'Danny Brooks', nick: 'DB', pledgeClass: 'Fall 2026' });
+const danny = P3.S.players.find(p => p.name === 'Danny Brooks');
+ok(danny && danny.nick === 'DB' && P3.S.mePid === danny.id && !danny.pledge, 'a newcomer registers themselves in one step');
+const P4 = ui(await boot(keep));
+await settle();
+P4.click('[data-act="who-skip"]');
+const P5 = ui(await boot(Object.assign({}, keep, Object.fromEntries(Object.keys(P4.win.localStorage).map(k => [k, P4.win.localStorage.getItem(k)])))));
+await settle();
+ok(P5.q('#sheet').hidden, '“Just watching” stops the question on that phone');
+
 console.log('\n§18 The real website (sign-in + shared database), against a stand-in server');
 const srv = fake.server();
 const A1 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));
@@ -435,6 +459,14 @@ A2.click('[data-act="tv"]');
 ok(A2.q('.tv') && A2.qa('.tv-score').map(x => x.textContent).join('-') === '1-0', 'TV mode shows the big scoreboard', A2.qa('.tv-score').map(x => x.textContent));
 A2.click('[data-act="tv-exit"]');
 ok(A2.S.view.kind === 'watch' && !A2.q('.tv'), 'and Exit goes back to watching');
+
+console.log('   — a brother with no email');
+const A4 = ui(await bootCloud(srv, 'http://127.0.0.1/die/?join=' + CODE));
+ok(/Continue without email/.test(A4.view()), 'the sign-in screen offers a no-email way in');
+A4.click('[data-act="anon"]');
+await settle(24);
+ok(A4.S.gid === GID && A4.S.players.length === 4, 'one tap plus the invite link puts them in the house');
+ok(!A4.q('#sheet').hidden && /Who are you\?/.test(A4.q('#sheet').textContent), 'then they pick who they are');
 
 console.log('   — a stranger without the link');
 const A3 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));

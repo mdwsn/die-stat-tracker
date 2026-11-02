@@ -76,7 +76,7 @@ fixable. The README covers the user-facing feature list.
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 135 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 144 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.
@@ -138,6 +138,14 @@ Circle (a Linear-style UI). The rules, all set as tokens at the top of `app.css`
   Pledge Statistician** = most *finished* games tracked as a pledge, ties broken by throws logged. The
   draft remembers the keeper per phone. `null` falls back to the player linked to the viewer's account,
   and `''` means explicitly nobody. Games from before this have no scorer and simply don't count.
+- **Pick who you are (2026-11-01).** Each phone remembers which player it is per group
+  (`plunk.me.<gid>`, localStorage). It's asked once on first load of a group with players (a sheet);
+  "Just watching" sets `plunk.watcher.<gid>`. The **You** button switches, for a shared phone at the table.
+  `S.mePid` feeds the default stats-keeper and "This is you". On the website, **Continue without email**
+  = Supabase anonymous sign-in (needs *Allow anonymous sign-ins* ON). Anonymous users are `authenticated`,
+  so the existing rules apply unchanged and the invite link remains the gate. Caveat: an anonymous account
+  lives on that phone. Clearing site data means opening the invite link again and re-picking your name;
+  no stats are lost, since stats belong to players, not accounts.
 - **Names are registered once.** Exact duplicates are blocked; near misses ("Jaek") prompt "did you mean".
 
 ## Known limits (say them plainly)

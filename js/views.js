@@ -87,6 +87,8 @@
       (S.canWrite ? '<button class="btn wide side-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '') +
       '<nav class="side-nav" aria-label="Sections">' + nav + '</nav>' +
       '<div class="side-foot' + (!shared ? ' device' : S.offline ? ' offline' : '') + '"><span class="dot"></span>' + status + '</div>' +
+      '<button class="me-btn" data-act="switch-me" aria-label="' + (S.mePid ? 'You are ' + esc(nameOf(S, S.mePid)) + '. Switch' : 'Who are you?') + '">' +
+        (S.mePid ? av(S.byId[S.mePid], 'sm') + '<span>' + esc(nameOf(S, S.mePid)) + '</span>' : '<span>Who are you?</span>') + '</button>' +
       (S.offline ? '<span class="sync-pill" role="status">Offline' + (S.unsynced ? ' · ' + S.unsynced + ' to upload' : '') + '</span>' : '') +
       (S.canWrite && !onPlay ? '<button class="btn sm top-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '');
   };
@@ -94,6 +96,28 @@
     return TABS.map(function (t) {
       return '<button data-act="nav" data-to="' + t[0] + '"' + (S.route === t[0] ? ' aria-current="page"' : '') + '>' + icon(t[0]) + '<span>' + t[2] + '</span></button>';
     }).join('');
+  };
+
+  /* ---------- who are you (no email needed) ---------- */
+  V.whoSheet = function (S) {
+    var q = S.whoQ || '';
+    var list = (q ? L.searchPlayers(S.players, q) : S.players.filter(function (p) { return !p.archived; }).sort(function (a, b) { return a.name.localeCompare(b.name); }));
+    var rows = list.map(function (p) {
+      return '<button class="li" data-act="i-am" data-id="' + esc(p.id) + '">' + av(p) + '<span class="grow"><span class="name">' + esc(p.name) +
+        (p.nick ? ' <span class="faint">“' + esc(p.nick) + '”</span>' : '') + '</span><span class="meta">' + (p.pledge ? 'Pledge' + (p.pledgeClass ? ' · ' + esc(p.pledgeClass) : '') : 'Brother') + '</span></span>' +
+        (p.id === S.mePid ? '<span class="chip ok">You</span>' : '') + '</button>';
+    }).join('');
+    return (S.players.length ? '<p class="note">Tap your name. This phone remembers you, and anyone can switch from the <b>You</b> button.</p>' +
+        '<input class="input" id="who-q" data-input="who-q" placeholder="Find your name" autocomplete="off" value="' + esc(q) + '">' +
+        '<div class="results" id="who-list">' + (rows || '<p class="note">No one by that name yet. Register below.</p>') + '</div>'
+      : '<p class="note">You’re the first one here. Register yourself and you’re in.</p>') +
+      '<form class="stack" data-form="whoami"><h3>' + (S.players.length ? 'Not on the list? Register' : 'Register') + '</h3>' +
+      '<div class="field"><label for="who-name">Full name</label><input class="input" id="who-name" name="name" required maxlength="60" autocomplete="name" value="' + esc(q) + '"></div>' +
+      '<div class="field"><label for="who-nick">Nickname (optional)</label><input class="input" id="who-nick" name="nick" maxlength="30" autocomplete="off"></div>' +
+      '<div class="field"><span class="lab">I’m a</span><div class="row"><label class="check"><input type="radio" name="role" value="brother" checked> Brother</label><label class="check"><input type="radio" name="role" value="pledge"> Pledge</label></div></div>' +
+      '<div class="field"><label for="who-class">Pledge class (optional)</label><input class="input" id="who-class" name="pledgeClass" maxlength="30" placeholder="e.g. Fall 2026"></div>' +
+      '<div id="who-warn"></div><button class="btn big" type="submit">That’s me</button></form>' +
+      '<button class="btn ghost" data-act="who-skip">Just watching</button>';
   };
 
   /* ---------- sign in (the website) ---------- */
@@ -105,7 +129,10 @@
       (S.pendingJoin ? '<div class="notice">You’ve been invited to a group. ' + (up ? 'Create an account' : 'Sign in') + ' and you’ll join it straight away.</div>' : '') +
       (S.authNote ? '<div class="notice">' + esc(S.authNote) + '</div>' : '') +
       '<form class="card pad stack" data-form="auth" novalidate>' +
-      (S.googleOn ? '<button type="button" class="btn ghost big wide" data-act="google">Continue with Google</button><div class="or"><span>or use email</span></div>' : '') +
+      '<button type="button" class="btn big wide" data-act="anon">Continue without email</button>' +
+      '<p class="note">Open your house’s invite link, then pick your name. This phone stays signed in.</p>' +
+      (S.googleOn ? '<button type="button" class="btn ghost big wide" data-act="google">Continue with Google</button>' : '') +
+      '<div class="or"><span>or use email</span></div>' +
       '<div class="field"><label for="auth-email">Email</label><input class="input" id="auth-email" name="email" type="email" autocomplete="email" inputmode="email" required value="' + esc(S.authEmail || '') + '"></div>' +
       '<div class="field"><label for="auth-pw">Password</label><input class="input" id="auth-pw" name="password" type="password" required minlength="6" autocomplete="' + (up ? 'new-password' : 'current-password') + '">' +
       (up ? '<span class="hint">At least 6 characters.</span>' : '') + '</div>' +
@@ -542,7 +569,7 @@
 
   V.player = function (S, p) {
     var r = S.allRows[p.id] || null, pl = r && r.pledgeLine;
-    var mine = S.me && p.userId === S.me;
+    var mine = (S.me && p.userId === S.me) || p.id === S.mePid;
     function kpi(label, val) { return '<div class="kpi"><span class="lab">' + label + '</span><span class="num">' + val + '</span></div>'; }
     var k = r && r.gp
       ? '<div class="kpis">' + kpi('Record', r.w + '–' + r.l) + kpi('Win rate', L.fmtPct(r.winPct)) + kpi('Throws', r.thr) +

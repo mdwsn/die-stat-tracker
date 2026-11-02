@@ -55,7 +55,9 @@
     S.boardRows = rows;
     S.claimed = !!S.me && S.players.some(function (p) { return p.userId === S.me; });
     var mine = S.me && S.players.filter(function (p) { return p.userId === S.me && !p.archived; })[0];
-    S.claimedPid = mine ? mine.id : null;
+    var picked = S.gid && store_get('plunk.me.' + S.gid);
+    S.mePid = picked && S.byId[picked] && !S.byId[picked].archived ? picked : (mine ? mine.id : null);
+    S.claimedPid = S.mePid;
     S.inviteLink = S.group && S.group.joinCode && store && store.siteUrl ? store.siteUrl() + '?join=' + S.group.joinCode : '';
     S.canShare = !!(navigator.share);
     S.theme = store_get('dt.theme') === 'light' ? 'light' : 'dark';
@@ -131,11 +133,17 @@
     unGroup = store.listenGroup(gid, function (data) {
       S.groupReady = true;
       S.players = data.players;
+      var known = store_get('plunk.me.' + gid);
+      if (!askedWho[gid] && !known && !store_get('plunk.watcher.' + gid) && data.players.length && $('sheet').hidden) {
+        askedWho[gid] = true; setTimeout(function () { if (S.gid === gid && $('sheet').hidden) { derive(); askWho(); } }, 0);
+      }
       S.games = mergeGames(data.games);
       derive(); render();
     }, function (e) { banner('Can’t load this group (' + esc(e.code) + ').'); });
     derive(); render();
   }
+  var askedWho = {};
+  function askWho() { S.whoQ = ''; sheet('Who are you?', V.whoSheet(S)); }
   function keepDraft() { if (S.gid) store_set('plunk.draft.' + S.gid, JSON.stringify(S.draft)); }
 
   /* ---------- render ---------- */
@@ -517,6 +525,20 @@
       var v = el.dataset.v === 'light' ? 'light' : 'dark';
       store_set('dt.theme', v); applyTheme(v); render();
     },
+    'switch-me': function () { if (S.group) askWho(); },
+    'i-am': function (el) {
+      store_set('plunk.me.' + S.gid, el.dataset.id); closeSheet(); derive(); render();
+      toast('Hi, ' + nameOf(el.dataset.id));
+    },
+    'who-skip': function () { store_set('plunk.watcher.' + S.gid, '1'); closeSheet(); },
+    anon: function () {
+      S.authBusy = true; S.authError = ''; render();
+      store.auth.anon().then(function () { S.authBusy = false; }, function (e) {
+        S.authBusy = false;
+        S.authError = /disabled|not enabled/i.test(e.message || '') ? 'No-email sign-in isn’t switched on yet. Use email for now.' : authMessage(e);
+        render();
+      });
+    },
     'banner-x': function (el) { if (el.dataset.remember) store_set(el.dataset.remember, '1'); banner(''); },
     'switch-group': function () {
       sheet('Groups', '<div class="card list">' + S.groups.map(function (g) {
@@ -724,6 +746,19 @@
         render();   // with a session, the sign-in listener takes it from here
       }, function (e) { S.authBusy = false; S.authError = authMessage(e); render(); });
     },
+    whoami: function (f) {
+      var name = String(fv(f, 'name')).trim().replace(/\s+/g, ' ');
+      if (!name) return;
+      var look = L.lookalikes(S.players, name);
+      if (look.exact) {
+        $('who-warn').innerHTML = '<div class="warnbox"><b>' + esc(look.exact.name) + ' is already here.</b><button class="li" data-act="i-am" data-id="' + esc(look.exact.id) + '"><span class="grow name">That’s me</span></button></div>';
+        return;
+      }
+      var role = (f.querySelector('input[name="role"]:checked') || {}).value;
+      var p = newPlayer(name, { nick: String(fv(f, 'nick')).trim(), pledge: role === 'pledge', pledgeClass: String(fv(f, 'pledgeClass')).trim() });
+      store_set('plunk.me.' + S.gid, p.id); closeSheet(); derive(); render();
+      toast('Welcome, ' + (p.nick || p.name));
+    },
     join: function (f) {
       var code = String(fv(f, 'code')).trim().toUpperCase();
       if (code) { sess_set('plunk.join', code); joinFromInvite(); }
@@ -775,6 +810,12 @@
     }
   };
   var INPUTS = {
+    'who-q': function (el) {
+      S.whoQ = el.value;
+      var tmp = document.createElement('div'); tmp.innerHTML = V.whoSheet(S);
+      $('who-list') && ($('who-list').innerHTML = tmp.querySelector('#who-list') ? tmp.querySelector('#who-list').innerHTML : '');
+      var n = $('who-name'); if (n && !n.dataset.touched) n.value = el.value;
+    },
     'pick-q': function (el) { $('pick-results').innerHTML = pickResults(el.value); },
     'player-q': function (el) { S.ui.playerQ = el.value; render(); }
   };

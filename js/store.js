@@ -281,6 +281,7 @@
         return sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: siteUrl() } })
           .then(function (r) { if (r.error) throw r.error; return r.data; });
       },
+      anon: function () { return sb.auth.signInAnonymously().then(function (r) { if (r.error) throw r.error; return r.data; }); },
       google: function () { return sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: siteUrl() } }); },
       signOut: function () { return sb.auth.signOut(); }
     };
