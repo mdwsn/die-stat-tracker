@@ -64,10 +64,19 @@
       teams: [opts.teams[0].slice(), opts.teams[1].slice()],
       appeared: [opts.teams[0].slice(), opts.teams[1].slice()],
       stats: {}, adj: [0, 0], pledges: (opts.pledges || []).slice(),
-      log: [], turn: 0, subs: [], summary: '', edits: []
+      log: [], turn: 0, subs: [], summary: '', edits: [],
+      scorer: opts.scorer || null,               // player who kept the stats
+      scorerPledge: !!opts.scorerPledge          // were they a pledge when they did? (snapshot)
     };
     g.appeared[0].concat(g.appeared[1]).forEach(function (pid) { g.stats[pid] = blankStats(); });
     return g;
+  }
+  /* Was this player a pledge at time t? Current pledges are; initiated players were before
+     the day they were initiated. Used to snapshot pledge status onto a game. */
+  function wasPledgeAt(p, t) {
+    if (!p) return false;
+    if (p.pledge) return true;
+    return !!(p.initiated && (t || Date.now()) < p.initiated);
   }
   function teamScore(g, ti) {
     var total = (g.appeared[ti] || []).reduce(function (n, pid) { return n + pointsOf(g.stats[pid], g.rules); }, 0);
@@ -247,11 +256,20 @@
     var rows = {};
     players.forEach(function (p) {
       var r = emptyLine(); r.pid = p.id; r.pledgeLine = emptyLine(); r.last = 0;
+      r.tracked = 0; r.trackedAsPledge = 0; r.trackedThrows = 0;
       rows[p.id] = r;
     });
     games.forEach(function (g) {
       if (g.status !== 'final' || !inPeriod(g, period, now)) return;
       var win = winnerOf(g);
+      var keeper = g.scorer && rows[g.scorer];
+      if (keeper) {
+        keeper.tracked++;
+        if (g.scorerPledge) {
+          keeper.trackedAsPledge++;
+          keeper.trackedThrows += g.appeared[0].concat(g.appeared[1]).reduce(function (n, pid) { return n + throwsOf(g.stats[pid]); }, 0);
+        }
+      }
       [0, 1].forEach(function (ti) {
         g.appeared[ti].forEach(function (pid) {
           var r = rows[pid];
@@ -305,6 +323,8 @@
       return { pid: r.pid, impact: r.pledgeLine.impact, winPct: r.pledgeLine.winPct };
     }), 'impact', 'winPct');
     if (pl) out.push({ key: 'pledge', title: 'Top Pledge', pids: [pl.pid], value: fmt1(pl.impact) + ' impact / game', note: 'MVP number, counting only games played as a pledge' });
+    var st = best(rows.filter(function (r) { return r.trackedAsPledge > 0; }), 'trackedAsPledge', 'trackedThrows');
+    if (st) out.push({ key: 'stat', title: 'Best Pledge Statistician', pids: [st.pid], value: plural(st.trackedAsPledge, 'game') + ' tracked', note: 'Most games kept stats for as a pledge' });
     var duo = best(duos(games, period, now).filter(function (d) { return d.gp >= P.MIN_DUO_GAMES; }), 'winPct', 'gp');
     if (duo) out.push({ key: 'duo', title: 'Best Duo', pids: duo.pids, value: duo.w + '–' + (duo.gp - duo.w) + ' together', note: 'Best record as partners, ' + P.MIN_DUO_GAMES + '+ games' });
     return out;
@@ -380,7 +400,7 @@
     OUT_KEYS: OUT_KEYS, DEF_KEYS: DEF_KEYS, ALL_KEYS: ALL_KEYS,
     uid: uid, esc: esc, pct: pct, fmtPct: fmtPct, fmt1: fmt1, plural: plural, joinNames: joinNames,
     blankStats: blankStats, throwsOf: throwsOf, hitsOf: hitsOf, fairOf: fairOf, pointsOf: pointsOf,
-    newGame: newGame, teamScore: teamScore, winnerOf: winnerOf, winState: winState,
+    newGame: newGame, wasPledgeAt: wasPledgeAt, teamScore: teamScore, winnerOf: winnerOf, winState: winState,
     throwOrder: throwOrder, thrower: thrower, teamOf: teamOf,
     record: record, undo: undo, substitute: substitute, replacePlayer: replacePlayer, throwGaps: throwGaps,
     summarize: summarize, seasonStart: seasonStart, seasonLabel: seasonLabel, inPeriod: inPeriod,

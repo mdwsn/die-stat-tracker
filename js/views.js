@@ -29,9 +29,10 @@
     crosshair: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
     target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/>',
     repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
+    clipboard: '<rect x="5.5" y="4.5" width="13" height="16" rx="2"/><path d="M9 4.5V3h6v1.5"/><path d="M9 10h6M9 13.5h6M9 17h3"/>',
     star: '<path d="m12 3.5 2.5 5.3 5.8.7-4.3 4 1.1 5.8L12 16.4l-5.1 2.9 1.1-5.8-4.3-4 5.8-.7z"/>'
   };
-  var AWARD_ICON = { mvp: 'trophy', dpoy: 'shield', sniper: 'crosshair', sinks: 'target', iron: 'repeat', pledge: 'star', duo: 'players' };
+  var AWARD_ICON = { mvp: 'trophy', dpoy: 'shield', sniper: 'crosshair', sinks: 'target', iron: 'repeat', pledge: 'star', stat: 'clipboard', duo: 'players' };
   /* [route, sidebar label, phone tab label] */
   var TABS = [['play', 'Play', 'Play'], ['board', 'Leaderboard', 'Board'], ['games', 'Games', 'Games'], ['players', 'Players', 'Players'], ['group', 'House', 'House']];
 
@@ -122,6 +123,10 @@
       (p.pledge ? '<span class="chip pledge">Pledge</span>' : '') +
       '<span class="x" data-act="clear-slot" data-t="' + ti + '" data-s="' + si + '" aria-label="Remove">' + icon('x') + '</span></button>';
   }
+  function keeperSlot(p, act, empty, note) {
+    return '<div class="keeper"><span class="lab">Stats kept by</span><button class="slot' + (p ? ' filled' : '') + '" data-act="' + act + '">' +
+      (p ? av(p) + '<span class="nm">' + esc(p.name) + '</span>' + (note || '') : icon('clipboard') + '<span>' + empty + '</span>') + '</button></div>';
+  }
   function newGamePanel(S, d) {
     var full = d.teams[0][0] && d.teams[0][1] && d.teams[1][0] && d.teams[1][1];
     return '<section class="card pad stack">' +
@@ -132,6 +137,11 @@
       '<div class="vs">vs</div>' +
       '<div class="side"><div class="side-h">' + dot(1) + 'Team 2</div>' + slotBtn(S, 1, 0, d.teams[1][0]) + slotBtn(S, 1, 1, d.teams[1][1]) + '</div>' +
       '</div>' +
+      (function () {
+        var pid = d.scorer == null ? S.claimedPid : d.scorer, p = pid && S.byId[pid];
+        return keeperSlot(p, 'pick-scorer', 'Choose who’s keeping stats',
+          p ? (p.pledge ? '<span class="chip pledge">Pledge</span>' : '') + '<span class="x" data-act="clear-scorer" aria-label="Clear">' + icon('x') + '</span>' : '');
+      })() +
       '<div class="row between">' + seg('draft-mode', d.mode, [['table', 'All four'], ['throw', 'Throw by throw']], 'Logging style') +
       '<label class="check"><input type="checkbox" id="draft-def" data-change="draft-def"' + (d.defense ? ' checked' : '') + '> Track catches &amp; drops</label></div>' +
       '<p class="note">' + (d.mode === 'table'
@@ -240,7 +250,8 @@
       return '<span class="tn">' + dot(ti) + '<span>' + teamNames(S, g, ti) + '</span></span><span class="num' + (fin && w === 1 - ti ? ' faint' : '') + '">' + s + '</span>';
     }
     var score = '<section class="card pad stack">' +
-      '<span class="lab">' + esc(when(g.started || g.created)) + (g.defense ? '' : ' · offense only') + '</span>' +
+      '<span class="lab">' + esc(when(g.started || g.created)) + (g.defense ? '' : ' · offense only') +
+      (g.scorer && S.byId[g.scorer] ? ' · stats by ' + esc(nameOf(S, g.scorer)) : '') + '</span>' +
       '<div class="box-score">' + line(0, a) + line(1, b) + '</div>' +
       (g.summary ? '<p>' + esc(g.summary) + '</p>' : '') +
       (g.subs && g.subs.length ? '<p class="note">' + g.subs.map(function (s) { return esc(nameOf(S, s['in'])) + ' subbed in for ' + esc(nameOf(S, s.out)); }).join(' · ') + '</p>' : '') +
@@ -295,6 +306,7 @@
       '<p class="note">The score adds up from points and sinks. Use the adjustments only for anything your house scores outside the stat sheet.</p>' +
       '<div class="steps">' + adj(0) + adj(1) + '</div>' +
       '<label class="check"><input type="checkbox" data-change="ed-def"' + (g.defense ? ' checked' : '') + '> This game tracked catches &amp; drops</label>' +
+      keeperSlot(g.scorer && S.byId[g.scorer], 'ed-scorer', 'Not set', g.scorerPledge ? '<span class="chip pledge">As a pledge</span>' : '') +
       '<div class="field"><label for="ed-date">Played on</label><input class="input" type="datetime-local" id="ed-date" data-change="ed-date" value="' + esc(localInput(g.started || g.created)) + '"></div>' +
       '</section>' +
       '<section class="edit-grid">' + rows + '</section>' +
@@ -415,7 +427,7 @@
       ? '<div class="kpis">' + kpi('Record', r.w + '–' + r.l) + kpi('Win rate', L.fmtPct(r.winPct)) + kpi('Throws', r.thr) +
         kpi('Fair table hits', r.fair) + kpi('Short table hits', r.short) + kpi('Hit rate', L.fmtPct(r.hitPct)) +
         kpi('Points', r.pts) + kpi('Per game', L.fmt1(r.ppg)) + kpi('Cup hits', r.s.plk) + kpi('Sinks', r.s.snk) +
-        (r.defGp ? kpi('Catches', r.s.ctc) + kpi('Drops', r.s.drp) + kpi('Catch rate', L.fmtPct(r.catchPct)) : '') + kpi('Impact', L.fmt1(r.impact)) + '</div>'
+        (r.defGp ? kpi('Catches', r.s.ctc) + kpi('Drops', r.s.drp) + kpi('Catch rate', L.fmtPct(r.catchPct)) : '') + kpi('Impact', L.fmt1(r.impact)) + (r.tracked ? kpi('Games tracked', r.tracked) : '') + '</div>'
       : '<div class="empty"><b>No finished games yet</b><span>Stats appear after their first finished game.</span></div>';
     var split = pl && pl.gp && pl.gp < r.gp
       ? '<section class="section"><div class="section-h"><h2>As a pledge vs. since</h2></div><div class="tbl-wrap"><table class="stats"><thead><tr><th class="pl">Period</th><th>GP</th><th>W–L</th><th>Hit%</th><th>PPG</th><th>Impact</th></tr></thead><tbody>' +

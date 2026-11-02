@@ -9,7 +9,8 @@
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function store_get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function store_set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
-  function blankDraft() { return { teams: [[null, null], [null, null]], mode: 'table', defense: S.rules ? S.rules.defense : true }; }
+  /* scorer: null = default to the player linked to this account, '' = nobody, else a player id */
+  function blankDraft() { return { teams: [[null, null], [null, null]], mode: 'table', defense: S.rules ? S.rules.defense : true, scorer: null }; }
 
   var S = P.S = {
     ready: false, route: 'play', view: null, groups: [], gid: null, group: null,
@@ -51,6 +52,9 @@
     });
     S.boardRows = rows;
     S.claimed = !!S.me && S.players.some(function (p) { return p.userId === S.me; });
+    var mine = S.me && S.players.filter(function (p) { return p.userId === S.me && !p.archived; })[0];
+    S.claimedPid = mine ? mine.id : null;
+    if (S.players.length && S.draft.scorer && !(S.byId[S.draft.scorer] && !S.byId[S.draft.scorer].archived)) S.draft.scorer = null;
     if (S.players.length) S.draft.teams = S.draft.teams.map(function (t) {
       return t.map(function (pid) { return pid && S.byId[pid] && !S.byId[pid].archived ? pid : null; });
     });
@@ -178,6 +182,7 @@
 
   /* ---------- the player picker: search first, register only if new ---------- */
   function taken() {
+    if (S.pick && (S.pick.for === 'scorer' || S.pick.for === 'ed-scorer')) return [];   // anyone can keep stats
     if (S.pick && S.pick.for === 'draft') return S.draft.teams[0].concat(S.draft.teams[1]).filter(Boolean);
     var g = S.pick && S.pick.for === 'replace' ? S.edit : (S.view && game(S.view.id));
     return g ? g.teams[0].concat(g.teams[1]) : [];
@@ -207,6 +212,8 @@
     var ctx = S.pick, p = S.byId[pid];
     closeSheet();
     if (!ctx || !p) return;
+    if (ctx.for === 'scorer') { S.draft.scorer = pid; keepDraft(); render(); return; }
+    if (ctx.for === 'ed-scorer') { S.edit.scorer = pid; S.edit.scorerPledge = L.wasPledgeAt(p, S.edit.started || S.edit.created); render(); return; }
     if (ctx.for === 'draft') { S.draft.teams[ctx.t][ctx.s] = pid; keepDraft(); render(); }
     else if (ctx.for === 'sub') {
       var g = clone(game(S.view.id));
@@ -275,6 +282,9 @@
       if (!S.canWrite) return;
       openPicker({ for: 'draft', t: +el.dataset.t, s: +el.dataset.s }, 'Team ' + (+el.dataset.t + 1) + ' — pick a player');
     },
+    'pick-scorer': function () { if (S.canWrite) openPicker({ for: 'scorer' }, 'Who’s keeping stats?'); },
+    'clear-scorer': function () { S.draft.scorer = ''; keepDraft(); render(); },
+    'ed-scorer': function () { openPicker({ for: 'ed-scorer' }, 'Who kept the stats?'); },
     'clear-slot': function (el) { S.draft.teams[+el.dataset.t][+el.dataset.s] = null; keepDraft(); render(); },
     pick: function (el) { picked(el.dataset.id); },
     'pick-new': function (el) {
@@ -296,12 +306,14 @@
       S.draft.teams = [[all[0], all[1]], [all[2], all[3]]]; keepDraft(); render();
     },
     'start-game': function () {
-      var t = S.draft.teams;
+      var t = S.draft.teams, keep = S.draft.scorer;
+      var keeper = keep == null ? S.claimedPid : (keep || null);
       var g = L.newGame({
         teams: t, mode: S.draft.mode, defense: S.draft.defense, rules: S.rules, by: S.me,
-        pledges: t[0].concat(t[1]).filter(function (pid) { return S.byId[pid] && S.byId[pid].pledge; })
+        pledges: t[0].concat(t[1]).filter(function (pid) { return S.byId[pid] && S.byId[pid].pledge; }),
+        scorer: keeper, scorerPledge: L.wasPledgeAt(S.byId[keeper], Date.now())
       });
-      S.draft = blankDraft(); S.draft.mode = g.mode; S.draft.defense = g.defense; keepDraft();
+      S.draft = blankDraft(); S.draft.mode = g.mode; S.draft.defense = g.defense; S.draft.scorer = keep; keepDraft();   // same keeper next game
       S.view = { kind: 'live', id: g.id };
       saveGame(g); keepAwake(true); window.scrollTo(0, 0);
     },

@@ -109,6 +109,10 @@ type('#pick-q', 'matt');
 ok(!$$('#pick-results [data-act="pick"]').some(b => b.textContent.includes('Matt Price')), 'someone already in the game is not offered again');
 type('#pick-q', 'chris');
 click($$('#pick-results [data-act="pick"]').find(b => b.textContent.includes('Chris Diaz')));
+click('[data-act="pick-scorer"]');
+type('#pick-q', 'sam');
+click($$('#pick-results [data-act="pick"]').find(b => b.textContent.includes('Sam Ortiz')));
+ok(/Sam Ortiz/.test($('[data-act="pick-scorer"]').textContent), 'the stats-keeper is picked from search like a player');
 click('[data-act="start-game"]');
 ok(S.view && S.view.kind === 'live' && $('.scorebar'), 'start opens the live table');
 ok($$('.seat').length === 4, 'all four players on screen');
@@ -167,6 +171,8 @@ ok(/Finish game/.test($('#sheet').textContent), 'finishing asks for confirmation
 click('[data-act="finish-yes"]');
 const g1 = P.app.game(S.view.id);
 ok(g1.status === 'final' && g1.ended, 'game is final');
+ok(g1.scorer === SAM && g1.scorerPledge === true, 'the game records who kept the stats, and that they were a pledge');
+ok(S.draft.scorer === SAM, 'the next game remembers who keeps stats');
 const sentences = g1.summary.split(/(?<=\.)\s+/);
 ok(sentences.length === 2 && /7–3/.test(g1.summary), 'recap is exactly two sentences with the score', g1.summary);
 console.log('     recap: ' + g1.summary);
@@ -180,6 +186,7 @@ ok(row(M).l === 1, 'losers get the loss');
 ok($('table.stats') && /Throws/.test($('table.stats').textContent), 'board shows a Throws column');
 ok(!/pl[iou]nk/i.test(view()) && /Fair table/.test(view()) && /Short table/.test(view()), 'leaderboard uses the house stat names');
 ok(row(M).pledgeLine.gp === 1, 'Matt’s game counts in his pledge split');
+ok(S.awards.some(a => a.key === 'stat' && a.pids[0] === SAM) && /Best Pledge Statistician/.test(view()), 'Best Pledge Statistician goes to the pledge who tracked the game');
 
 console.log('\n§10 Editing a finished game');
 click('[data-act="nav"][data-to="games"]');
@@ -207,6 +214,15 @@ click($$('#pick-results [data-act="pick"]').find(b => b.textContent.includes('Ja
 click('[data-act="ed-save"]');
 const JM = ids['Jake Millr'];
 ok(P.app.game(g1.id).stats[JM].ctc === 2 && !P.app.game(g1.id).stats[C], '“Wrong person?” moves the whole line to the right player');
+function setKeeper(q, name) {
+  click(`[data-act="edit-game"][data-id="${g1.id}"]`);
+  click('[data-act="ed-scorer"]'); type('#pick-q', q);
+  click($$('#pick-results [data-act="pick"]').find(b => b.textContent.includes(name)));
+  click('[data-act="ed-save"]');
+}
+setKeeper('jake miller', 'Jake Miller');
+ok(P.app.game(g1.id).scorer === J && !P.app.game(g1.id).scorerPledge, 'who kept the stats can be fixed later; pledge status follows the person');
+setKeeper('sam', 'Sam Ortiz');
 
 console.log('\n§11 Rules & math');
 const t = L.newGame({ teams: [[J, R], [M, C]] });
@@ -238,6 +254,7 @@ click('[data-act="initiate"]');
 click('[data-act="initiate-yes"]');
 ok(!S.players.some(p => p.pledge), 'initiating clears current pledge status');
 ok(P.app.game(g1.id).pledges.includes(M), 'old games still show they played as pledges');
+ok(L.awards(L.leaderboard(S.games, S.players, 'all'), S.games, 'all').some(a => a.key === 'stat' && a.pids[0] === SAM), 'games tracked as a pledge still count after initiation');
 
 console.log('\n§14 Every screen renders; names are escaped');
 click('[data-act="nav"][data-to="players"]');
@@ -269,6 +286,9 @@ ok(fr.fair === 2 && fr.short === 1, 'the leaderboard carries fair and short tabl
 const zero = L.newGame({ teams: [[J, R], [M, C]], rules: { plunkPts: 0 } });
 zero.stats[J].snk = 2;
 ok(L.teamScore(zero, 0) === 0, 'a sink set to be worth 0 really scores 0');
+const kg = L.newGame({ teams: [[J, R], [M, C]], scorer: J, scorerPledge: false });
+kg.status = 'final';
+ok(!L.awards(L.leaderboard([kg], S.players, 'all'), [kg], 'all').some(a => a.key === 'stat'), 'tracking as a member doesn’t count toward the pledge award');
 
 console.log('\n' + (fail ? 'SOME CHECKS FAILED' : 'ALL SMOKE TESTS PASSED') + ` — ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

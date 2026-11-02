@@ -196,6 +196,8 @@ button.ws:hover { background: var(--muted); }
 .grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--s3); }
 .score-inline { display: inline-flex; align-items: center; gap: var(--s2); font-size: 24px; line-height: 32px; }
 details > summary { cursor: pointer; width: fit-content; }
+.keeper { display: grid; gap: var(--s2); }
+.keeper .slot { height: 44px; }
 .split { display: grid; gap: var(--s6); }
 @media (min-width: 1000px) { .split { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }
 .back { margin-left: calc(-1 * var(--s2)); }

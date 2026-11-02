@@ -33,7 +33,7 @@ fixable. The README covers the user-facing feature list.
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 60 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 77 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.
@@ -79,6 +79,11 @@ Circle (a Linear-style UI). The rules, all set as tokens at the top of `app.css`
   behind a confirm.
 - **Pledge status is snapshotted per game** (`game.pledges`), so initiating a class keeps their
   pledge-era games tagged. Player profiles split "as pledge" vs "since".
+- **Stats kept by (2026-11-01).** Each game stores `scorer` (a player id) and a `scorerPledge`
+  snapshot taken from `wasPledgeAt()`: a pledge now, or initiated after the game was played. **Best
+  Pledge Statistician** = most *finished* games tracked as a pledge, ties broken by throws logged. The
+  draft remembers the keeper per phone. `null` falls back to the player linked to the viewer's account,
+  and `''` means explicitly nobody. Games from before this have no scorer and simply don't count.
 - **Names are registered once.** Exact duplicates are blocked; near misses ("Jaek") prompt "did you mean".
 
 ## Known limits (say them plainly)

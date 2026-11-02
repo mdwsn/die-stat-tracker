@@ -22,7 +22,9 @@ fill in on their own.
 - **Pledge tracking.** Tag pledges by class. Games they played as pledges stay tagged after
   initiation, and profiles show pledge-era stats separately.
 - **Leaderboard and awards.** Sort by any stat and filter by season, last 30 days or all time. Awards:
-  MVP, Defensive Player, Sniper, Most Sinks, Iron Man, Top Pledge, Best Duo.
+  MVP, Defensive Player, Sniper, Most Sinks, Iron Man, Top Pledge, Best Pledge Statistician, Best Duo.
+- **Credit for keeping stats.** Every game records who logged it ("Stats kept by"). The pledge who
+  tracked the most games wins Best Pledge Statistician. The phone remembers its stats-keeper between games.
 
 ## Where games are saved
 
