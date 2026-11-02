@@ -205,6 +205,13 @@ details > summary { cursor: pointer; width: fit-content; }
 .invite { padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--subtle); font-size: 13px; line-height: 20px; overflow-wrap: anywhere; user-select: all; }
 .code { letter-spacing: .08em; color: var(--fg); }
 .side-foot.offline .dot { background: var(--warn); }
+.sync-pill {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 var(--s2);
+  border-radius: var(--r-sm); background: var(--warn-subtle); color: var(--warn); font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+.sync-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.sync-pill + .top-new { margin-left: var(--s2); }
+@media (min-width: 900px) { .app:not(.solo) .sync-pill { display: none; } }   /* the sidebar footer says it there */
 .keeper .slot { height: 44px; }
 .split { display: grid; gap: var(--s6); }
 @media (min-width: 1000px) { .split { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }

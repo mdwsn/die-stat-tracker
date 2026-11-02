@@ -36,6 +36,24 @@ fixable. The README covers the user-facing feature list.
   and on the `online` event. Groups are cached (`plunk.cache.*`) so a reload with no signal still shows the
   last data plus the parked taps. Realtime catches up (refetch) on reconnect and when the tab wakes.
   Realtime can't filter DELETE events, so one unfiltered delete listener ignores ids it doesn't hold.
+- **Newer save wins (2026-11-01).** Games and players save through the `save_game` / `save_player` RPCs,
+  which only write when the incoming `data.updated` is at least the stored one. Without this, a phone
+  that was offline for hours would flush its outbox on reconnect and clobber newer taps from another phone.
+  Players now carry `updated` too. A rejected save fires `onStale`, and the app shows a banner and refetches.
+  Only one phone should keep score per game; whole-game last-writer-wins can still drop one phone's taps.
+- **Opens offline (PWA).** `sw.js` serves the app's own files network-first (3 s timeout, then the saved
+  copy) and the CDN/fonts cache-first. It never touches `*.supabase.co`. `manifest.webmanifest` plus
+  `icons/` (drawn by `tools/make-icons.py`, standard library only) allow home-screen install. **Every file in
+  sw.js's `SHELL` list must exist**, or `cache.addAll` rejects and offline loading silently stops working.
+  smoke §0 checks this, and that every page script is in the list. Bump `CACHE` only when sw.js's own logic
+  changes. It's never registered inside claude.ai.
+- **Backups.** House → Backup downloads `{app:'dice-tracker', format:1, group, players, games}`. Restore
+  works two ways. Into the same group, it merges by id and the newer copy wins. Into another group,
+  players are matched by normalized name and everyone else gets a **stable id** (an FNV hash of target
+  group + old id), so restoring the same file twice adds nothing; games are remapped to match. This is
+  also the migration path from the device-only site to the shared database.
+- **Schema changes reach the real database only when the maintainer re-runs `supabase/schema.sql`** in the
+  Supabase SQL editor. It's written to be safe to re-run. Say so whenever it changes.
 - With `BACKEND` empty, `index.html` falls back to **device-only** (localStorage) and shows a dismissable
   note saying so.
 - `artifact.html` is a bare shell for claude.ai, which wraps it in its own page skeleton. **Never add
@@ -52,7 +70,7 @@ fixable. The README covers the user-facing feature list.
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 98 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 115 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.

@@ -122,12 +122,53 @@ begin
 end;
 $$;
 
+-- Save a game / a player ONLY if it's at least as new as the copy already here
+-- (compared by the app's own `updated` time inside the data). This is what stops a
+-- phone that was offline for hours from overwriting newer taps from another phone
+-- when it finally reconnects. Returns true if saved, false if the server's copy was newer.
+-- security invoker: the normal member-only rules above still apply.
+create or replace function public.save_game(p_id text, p_group text, p_data jsonb)
+returns boolean
+language plpgsql security invoker set search_path = public
+as $$
+declare ok boolean;
+begin
+  insert into public.games as cur (id, group_id, data, started, updated_at)
+  values (p_id, p_group, p_data, floor(coalesce((p_data->>'started')::numeric, 0))::bigint, now())
+  on conflict (id) do update
+    set data = excluded.data, group_id = excluded.group_id, started = excluded.started, updated_at = now()
+    where coalesce((cur.data->>'updated')::numeric, 0) <= coalesce((excluded.data->>'updated')::numeric, 0)
+  returning true into ok;
+  return coalesce(ok, false);
+end;
+$$;
+
+create or replace function public.save_player(p_id text, p_group text, p_data jsonb)
+returns boolean
+language plpgsql security invoker set search_path = public
+as $$
+declare ok boolean;
+begin
+  insert into public.players as cur (id, group_id, data, updated_at)
+  values (p_id, p_group, p_data, now())
+  on conflict (id) do update
+    set data = excluded.data, group_id = excluded.group_id, updated_at = now()
+    where coalesce((cur.data->>'updated')::numeric, 0) <= coalesce((excluded.data->>'updated')::numeric, 0)
+  returning true into ok;
+  return coalesce(ok, false);
+end;
+$$;
+
 revoke execute on function public.create_group(text, jsonb) from public, anon;
 revoke execute on function public.join_group(text)         from public, anon;
 revoke execute on function public.is_member(text)          from public, anon;
 grant  execute on function public.create_group(text, jsonb) to authenticated;
 grant  execute on function public.join_group(text)         to authenticated;
 grant  execute on function public.is_member(text)          to authenticated;
+revoke execute on function public.save_game(text, text, jsonb)   from public, anon;
+revoke execute on function public.save_player(text, text, jsonb) from public, anon;
+grant  execute on function public.save_game(text, text, jsonb)   to authenticated;
+grant  execute on function public.save_player(text, text, jsonb) to authenticated;
 
 -- Live updates: phones watching a game see every tap as it's logged.
 do $$

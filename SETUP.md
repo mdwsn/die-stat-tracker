@@ -47,7 +47,8 @@ Your Mac's keychain remembers the token from now on, so Claude can upload future
 3. Open **SQL Editor** in the left sidebar, then **New query**.
 4. Open `supabase/schema.sql` from this folder, copy **all** of it, paste it into the editor, and press **Run**.
    You should see *Success. No rows returned.* That builds the tables, plus the rules that decide who can
-   see what. It's safe to run again later.
+   see what. It's safe to run again later. **Whenever Claude says the database changed, run the file again.**
+   It only adds or updates; it never deletes data.
 
 ## Step 3 · Set up sign-in
 
@@ -88,8 +89,9 @@ From then on, every upload updates the site within a minute or two.
 1. Open the site on your phone, create your account, and create **Psi Upsilon Omega**.
 2. Go to **House → Invite people → Copy invite link** and send it in the group chat.
    Anyone who opens it and signs up joins the house and can log games.
-3. On iPhone, add it to your home screen: Safari → Share → **Add to Home Screen**.
-   It then opens like an app.
+3. On iPhone, add it to your home screen: Safari → Share → **Add to Home Screen**. It then opens like an
+   app, full screen, and it opens even with no signal.
+4. Every so often, **House → Backup → Download backup** keeps a copy of everything as a file.
 
 ---
 

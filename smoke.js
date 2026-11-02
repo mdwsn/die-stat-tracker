@@ -91,6 +91,14 @@ ok(/<meta name="viewport"/.test(read('index.html')) && /^<!doctype html>/i.test(
 ok(/<title>Dice Tracker<\/title>/.test(read('index.html')) && /<title>Dice Tracker<\/title>/.test(read('artifact.html')), 'both pages are named Dice Tracker');
 ok(!/<!doctype|<html[\s>]|<head[\s>]|<body[\s>]/i.test(read('artifact.html')), 'artifact.html stays a bare shell (claude.ai adds the page around it)');
 
+const shell = (read('sw.js').match(/const SHELL = \[([\s\S]*?)\];/) || [])[1] || '';
+const shellFiles = (shell.match(/'([^']+)'/g) || []).map(x => x.slice(1, -1)).filter(f => f !== './');
+ok(shellFiles.length > 5 && shellFiles.every(f => fs.existsSync(path.join(dir, f))), 'every file the offline helper (sw.js) saves really exists', shellFiles.filter(f => !fs.existsSync(path.join(dir, f))));
+const appScripts = (read('index.html').match(/<script src="([^"]+)"/g) || []).map(x => x.slice(13, -1));
+ok(appScripts.every(f => shellFiles.includes(f)), 'and it saves every script the page loads', appScripts.filter(f => !shellFiles.includes(f)));
+const mf = JSON.parse(read('manifest.webmanifest'));
+ok(/rel="manifest"/.test(read('index.html')) && mf.icons.length >= 2 && mf.icons.every(i => fs.existsSync(path.join(dir, i.src))), 'index.html links the install file, and every icon it lists exists');
+
 console.log('\n§1 First run');
 ok(/browser only/.test($('#banner').textContent), 'off claude.ai, a note says games are saved on this device only');
 click('[data-act="banner-x"]');
@@ -320,6 +328,26 @@ const kg = L.newGame({ teams: [[J, R], [M, C]], scorer: J, scorerPledge: false }
 kg.status = 'final';
 ok(!L.awards(L.leaderboard([kg], S.players, 'all'), [kg], 'all').some(a => a.key === 'stat'), 'tracking as a member doesn’t count toward the pledge award');
 
+console.log('\n§19 Backups');
+const bk = JSON.parse(JSON.stringify(P.app.backupData()));
+ok(bk.app === 'dice-tracker' && bk.players.length === S.players.length && bk.games.length === S.games.length, 'a backup holds every player and game');
+const samePlan = P.app.planImport(bk);
+ok(!samePlan.players.length && !samePlan.games.length && samePlan.c.sameG === S.games.length, 'restoring it into the same group adds nothing');
+click('[data-act="switch-group"]');
+submit($('#sheet form[data-form="create-group"]'), { name: 'Beta House', kind: 'friends' });
+addPlayer('Jake Miller');
+const movePlan = P.app.planImport(bk);
+ok(movePlan.c.matchedP === 1 && movePlan.c.newP === bk.players.length - 1 && movePlan.c.newG === bk.games.length, 'into another group: same-name players are matched, the rest are added', movePlan.c);
+P.app.applyImport(movePlan);
+const jakeHere = S.players.find(p => p.name === 'Jake Miller');
+const moved = S.games[0];
+ok(S.games.length === bk.games.length && moved.appeared[0].includes(jakeHere.id) && moved.stats[jakeHere.id], 'imported games point at this group’s own players');
+ok(S.allRows[jakeHere.id].gp === 1, 'so their stats count on this group’s leaderboard');
+const againPlan = P.app.planImport(bk);
+ok(!againPlan.players.length && !againPlan.games.length, 'restoring the same file twice adds nothing the second time');
+let refused = false; try { P.app.planImport({ hello: 1 }); } catch (e) { refused = true; }
+ok(refused, 'a file that isn’t a backup is refused');
+
 console.log('\n§18 The real website (sign-in + shared database), against a stand-in server');
 const srv = fake.server();
 const A1 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));
@@ -339,6 +367,7 @@ ok(GID && srv.groups[GID] && srv.members.some(m => m.group_id === GID && m.role 
 for (const n of ['Jake Miller', 'Ryan Cole', 'Matt Price', 'Chris Diaz']) { A1.click('[data-act="add-player"]'); A1.submit('form[data-form="player"]', { name: n }); }
 await settle();
 ok(Object.values(srv.players).filter(p => p.group_id === GID).length === 4, 'players are saved to the server');
+ok(Object.values(srv.players).every(p => p.data.updated > 0), 'each with the time it was last changed (so newer wins)');
 A1.click('[data-act="nav"][data-to="group"]');
 const CODE = srv.groups[GID].join_code;
 ok(A1.q('#invite-link') && A1.q('#invite-link').textContent === 'http://127.0.0.1/die/?join=' + CODE, 'House shows the group’s invite link');
@@ -385,6 +414,7 @@ A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
 A1.click(`.tap[data-p="${MP}"][data-k="tbl"]`);
 await settle();
 ok(A1.S.offline && /Offline/.test(A1.q('#saving').textContent), 'losing signal shows Offline');
+ok(A1.q('.sync-pill') && /Offline · 1 to upload/.test(A1.q('.sync-pill').textContent), 'the phone’s top bar says how many changes are waiting to upload');
 ok(A1.S.games.find(g => g.id === LIVE2).stats[JK].pt === 2, 'and the taps stay on screen');
 ok((A1.win.localStorage.getItem('plunk.outbox.v1') || '').includes(LIVE2), 'the unsaved game is parked on the phone');
 ok(srv.games[LIVE2].data.stats[JK].pt === 1, 'the server hasn’t seen those taps yet');
@@ -394,6 +424,23 @@ await settle(24);
 ok(srv.games[LIVE2].data.stats[JK].pt === 2 && srv.games[LIVE2].data.stats[MP].tbl === 1, 'when the signal comes back, the taps save on their own');
 ok(A1.win.localStorage.getItem('plunk.outbox.v1') === '{}' && !A1.S.offline, 'the parked copy is cleared and Offline goes away');
 ok(A2.S.games.find(g => g.id === LIVE2).stats[JK].pt === 2, 'and the other phone catches up');
+ok(!A1.q('.sync-pill'), 'the Offline badge goes away');
+
+console.log('   — two phones on one game, one of them offline (the newer save wins)');
+srv.offline = true;
+A1.click(`.tap[data-p="${JK}"][data-k="mis"]`);            // phone 1, no signal: an older change
+await settle();
+srv.offline = false;
+A2.click('[data-act="nav"][data-to="games"]');
+A2.click(`[data-act="open-game"][data-id="${LIVE2}"]`);
+A2.click(`.tap[data-p="${MP}"][data-k="plk"]`);            // phone 2, online, a moment later
+await settle();
+ok(srv.games[LIVE2].data.stats[MP].plk === 1, 'the online phone’s tap reaches the server');
+A1.win.dispatchEvent(new A1.win.Event('online'));         // phone 1 reconnects holding its older copy
+await settle(24);
+ok(srv.games[LIVE2].data.stats[MP].plk === 1 && !srv.games[LIVE2].data.stats[JK].mis, 'the older offline copy doesn’t overwrite the newer one');
+ok(/more recently/.test(A1.q('#banner').textContent), 'the offline phone is told why its taps weren’t added');
+ok(A1.S.games.find(g => g.id === LIVE2).stats[MP].plk === 1, 'and it switches to the newer version');
 
 console.log('   — signing out');
 A1.click('[data-act="nav"][data-to="group"]');

@@ -135,6 +135,17 @@ function client(srv) {
         srv.members.push({ group_id: args.p_id, user_id: me, role: 'owner' });
         return reply(code);
       }
+      if (name === 'save_game' || name === 'save_player') {
+        // same rule as schema.sql: members only, and never overwrite a newer copy
+        const table = name === 'save_game' ? 'games' : 'players', prev = srv[table][args.p_id];
+        if (!isMember(srv, me, args.p_group) || (prev && !isMember(srv, me, prev.group_id))) return reply(null, RLS);
+        if (prev && (prev.data.updated || 0) > (args.p_data.updated || 0)) return reply(false);
+        const row = { id: args.p_id, group_id: args.p_group, data: clone(args.p_data) };
+        if (table === 'games') row.started = Math.floor(args.p_data.started || 0);
+        srv[table][args.p_id] = row;
+        notify(srv, table, prev ? 'UPDATE' : 'INSERT', row);
+        return reply(true);
+      }
       if (name === 'join_group') {
         const g = Object.values(srv.groups).find((x) => x.join_code === String(args.p_code).trim().toUpperCase());
         if (!g) return reply(null, { message: 'No group has that invite code' });

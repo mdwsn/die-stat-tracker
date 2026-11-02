@@ -21,6 +21,12 @@ fill in on their own.
   "Didn't count" (kept on record, left out of stats). Undo reverses the last tap.
 - **Pledge tracking.** Tag pledges by class. Games they played as pledges stay tagged after
   initiation, and profiles show pledge-era stats separately.
+- **Built for bad signal.** The app opens with no signal at all. Taps made offline are kept on the phone
+  and upload by themselves when the signal returns, and the top bar shows how many are waiting. If two
+  phones edited the same game, the newer save wins; an old offline copy never overwrites newer taps.
+- **Backups.** House → Backup downloads every player and game as one file. Restoring adds anything missing,
+  matches players by name, and can be repeated safely.
+- **Installs like an app.** Add it to your phone's home screen and it opens full screen, with its own icon.
 - **Leaderboard and awards.** Sort by any stat and filter by season, last 30 days or all time. Awards:
   MVP, Defensive Player, Sniper, Most Sinks, Iron Man, Top Pledge, Best Pledge Statistician, Best Duo.
 - **Credit for keeping stats.** Every game records who logged it ("Stats kept by"). The pledge who
@@ -68,6 +74,8 @@ lose that column. Change its `label` instead.
 | `supabase/schema.sql` | The database: tables, and the rules for who can see and change what |
 | `tests/fake-supabase.js` | An in-memory stand-in for Supabase so the tests can run the website path |
 | `SETUP.md` | Step-by-step: putting the site online |
+| `sw.js` | Lets the site open with no signal by keeping a copy of the app's files on the phone |
+| `manifest.webmanifest`, `icons/` | What a phone needs to install it on the home screen. `tools/make-icons.py` redraws the icons |
 
 ## Tests
 

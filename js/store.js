@@ -167,7 +167,7 @@
 
   function CloudStore(sb) {
     var OUTBOX = 'plunk.outbox.v1', busy = 0, offline = false, stamp = 0;
-    var pendingFns = [], errorFns = [], queue = {}, groupsLoad = null, groupListeners = {};
+    var pendingFns = [], errorFns = [], staleFns = [], queue = {}, groupsLoad = null, groupListeners = {};
     function tellPending() { pendingFns.forEach(function (f) { f(busy, offline); }); }
     function setOffline(v) { if (offline !== v) { offline = v; tellPending(); } }
     function siteUrl() { return location.origin + location.pathname; }
@@ -180,7 +180,8 @@
     function exec(job) {
       if (job.op === 'delete') return run(sb.from(job.table).delete().eq('id', job.row.id));
       if (job.op === 'group') return run(sb.from('groups').update({ data: job.row.data }).eq('id', job.row.id));
-      return run(sb.from(job.table).upsert(job.row));
+      // games and players go through the newer-wins functions in schema.sql: false = the server's copy was newer
+      return run(sb.rpc(job.table === 'games' ? 'save_game' : 'save_player', { p_id: job.row.id, p_group: job.row.group_id, p_data: job.row.data }));
     }
     /* One write at a time per row; bursts collapse into the newest version. */
     function enqueue(key, job) {
@@ -198,8 +199,9 @@
       if (!e.busy) { e.busy = true; busy++; tellPending(); }
       var job = e.next, waiters = e.waiters;
       e.next = null; e.waiters = [];
-      exec(job).then(function () {
+      exec(job).then(function (saved) {
         e.tries = 0; unpark(key, job); setOffline(false);
+        if (saved === false) staleFns.forEach(function (f) { f(job.table, job.row.id, job.row.group_id); });
         waiters.forEach(function (w) { w.res(); });
         pump(key);
       }, function (raw) {
@@ -384,6 +386,9 @@
       },
       pending: function () { return busy; },
       isOffline: function () { return offline; },
+      outboxCount: function () { return Object.keys(outbox()).length; },
+      onStale: function (f) { staleFns.push(f); },
+      reload: function (gid) { return groupListeners[gid] ? groupListeners[gid]() : Promise.resolve(); },
       onPending: function (f) { pendingFns.push(f); },
       onWriteError: function (f) { errorFns.push(f); },
       retryNow: retryNow

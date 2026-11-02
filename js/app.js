@@ -58,6 +58,8 @@
     S.claimedPid = mine ? mine.id : null;
     S.inviteLink = S.group && S.group.joinCode && store && store.siteUrl ? store.siteUrl() + '?join=' + S.group.joinCode : '';
     S.canShare = !!(navigator.share);
+    S.lastBackup = S.gid ? +(store_get('plunk.lastBackup.' + S.gid) || 0) : 0;
+    try { S.standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch (e) { S.standalone = false; }
     if (S.players.length && S.draft.scorer && !(S.byId[S.draft.scorer] && !S.byId[S.draft.scorer].archived)) S.draft.scorer = null;
     if (S.players.length) S.draft.teams = S.draft.teams.map(function (t) {
       return t.map(function (pid) { return pid && S.byId[pid] && !S.byId[pid].archived ? pid : null; });
@@ -101,6 +103,7 @@
     return store.saveGame(S.gid, clone(g))['catch'](onWriteError);
   }
   function savePlayer(p) {
+    p.updated = Date.now();
     var i = S.players.findIndex(function (x) { return x.id === p.id; });
     if (i >= 0) S.players[i] = p; else S.players.push(p);
     derive(); render();
@@ -157,7 +160,7 @@
   }
   function savingText() {
     var sv = $('saving');
-    if (sv) sv.textContent = S.offline ? 'Offline · will sync' : store && store.pending() ? 'Saving…' : '';
+    if (sv) sv.textContent = S.offline ? 'Offline · ' + (S.unsynced ? S.unsynced + ' to upload' : 'will sync') : store && store.pending() ? 'Saving…' : '';
   }
   function go(route) {
     S.route = route; S.view = null; S.edit = null;
@@ -252,6 +255,18 @@
       '</form>';
   }
 
+  function keepData() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(function (yes) { if (!yes) navigator.storage.persist(); }); } catch (e) { }
+  }
+  /* Lets the site open with no signal (sw.js). Never inside claude.ai, which doesn't allow it. */
+  function registerOffline() {
+    try {
+      if (!('serviceWorker' in navigator) || window.claude) return;
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
+      navigator.serviceWorker.register('sw.js')['catch'](function () { });
+    } catch (e) { }
+  }
+
   /* ---------- live game ---------- */
   var wake = null;
   function keepAwake(on) {
@@ -274,6 +289,89 @@
       '<button class="btn big" data-act="finish-yes">Finish game</button><button class="btn ghost" data-act="close">Keep playing</button>');
   }
 
+  /* ---------- backups ---------- */
+  function slug(t) { return String(t || 'group').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group'; }
+  function backupData() {
+    var g = clone(S.group); delete g.joinCode;
+    return {
+      app: 'dice-tracker', format: 1, exportedAt: new Date().toISOString(), group: g,
+      players: S.players.map(function (p) { var c = clone(p); delete c.lastPlayed; return c; }),
+      games: S.games.map(clone)
+    };
+  }
+  /* The same backup restored into the same group always gets the same ids,
+     so restoring twice never doubles anything. */
+  function stableId(prefix, a, b) {
+    var str = a + '|' + b, h1 = 0x811c9dc5, h2 = 0x01000193;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+      h2 = Math.imul(h2 ^ c, 2246822519) >>> 0;
+    }
+    return prefix + 'i' + h1.toString(36) + h2.toString(36);
+  }
+  function remapGame(g, map, newId) {
+    function m(pid) { return map[pid] || pid; }
+    var ng = clone(g); ng.id = newId;
+    ng.teams = (ng.teams || []).map(function (t) { return t.map(m); });
+    ng.appeared = (ng.appeared || ng.teams).map(function (t) { return t.map(m); });
+    var st = {}; Object.keys(ng.stats || {}).forEach(function (pid) { st[m(pid)] = ng.stats[pid]; }); ng.stats = st;
+    ng.pledges = (ng.pledges || []).map(m);
+    (ng.log || []).forEach(function (e) { (e.it || []).forEach(function (it) { it[0] = m(it[0]); }); });
+    (ng.subs || []).forEach(function (sb) { sb.out = m(sb.out); sb['in'] = m(sb['in']); });
+    if (ng.scorer) ng.scorer = m(ng.scorer);
+    return ng;
+  }
+  function planImport(data) {
+    if (!data || data.app !== 'dice-tracker' || !Array.isArray(data.players) || !Array.isArray(data.games)) throw new Error('not a backup');
+    var same = !!(data.group && data.group.id === S.gid), map = {}, byName = {};
+    S.players.forEach(function (p) { byName[L.norm(p.name)] = p; });
+    var plan = { from: data.group ? data.group.name : 'a backup', at: data.exportedAt, players: [], games: [], c: { newP: 0, matchedP: 0, newG: 0, updG: 0, sameG: 0 } };
+    data.players.forEach(function (p) {
+      if (!p || !p.id || !p.name) return;
+      var mine = same ? S.byId[p.id] : null, twin = byName[L.norm(p.name)];
+      if (mine) { map[p.id] = p.id; if ((p.updated || 0) > (mine.updated || 0)) plan.players.push(clone(p)); plan.c.matchedP++; return; }
+      if (twin) { map[p.id] = twin.id; plan.c.matchedP++; return; }          // already registered here: use them
+      var id = same ? p.id : stableId('p', S.gid, p.id);
+      map[p.id] = id;
+      plan.players.push(Object.assign(clone(p), { id: id }));
+      plan.c.newP++;
+    });
+    data.games.forEach(function (g) {
+      if (!g || !g.id || !g.teams || !g.stats) return;
+      var ng = same ? clone(g) : remapGame(g, map, stableId('g', S.gid, g.id)), cur = game(ng.id);
+      if (!cur) { plan.games.push(ng); plan.c.newG++; }
+      else if ((ng.updated || 0) > (cur.updated || 0)) { plan.games.push(ng); plan.c.updG++; }
+      else plan.c.sameG++;
+    });
+    return plan;
+  }
+  function applyImport(plan) {
+    plan.players.forEach(function (p) {
+      var i = S.players.findIndex(function (x) { return x.id === p.id; });
+      if (i >= 0) S.players[i] = p; else S.players.push(p);
+      store.savePlayer(S.gid, clone(p))['catch'](onWriteError);           // keeps the backup's own `updated` time
+    });
+    plan.games.forEach(function (g) {
+      S.local[g.id] = clone(g);
+      store.saveGame(S.gid, clone(g))['catch'](onWriteError);
+    });
+    S.games = mergeGames(S.games); derive(); render();
+  }
+  function importSheet(plan) {
+    S.importPlan = plan;
+    var c = plan.c, nothing = !plan.players.length && !plan.games.length;
+    sheet('Restore from a backup',
+      '<p>From <b>' + esc(plan.from) + '</b>' + (plan.at ? ', saved ' + esc(V.when(Date.parse(plan.at))) : '') + '.</p>' +
+      '<div class="card list">' +
+      '<div class="li"><span class="grow name">' + L.plural(c.newP, 'new player') + '</span><span class="meta">' + c.matchedP + ' already here</span></div>' +
+      '<div class="li"><span class="grow name">' + L.plural(c.newG, 'new game') + '</span><span class="meta">' + c.updG + ' newer copies</span></div>' +
+      '<div class="li"><span class="grow name">' + L.plural(c.sameG, 'game') + ' already up to date</span></div></div>' +
+      '<p class="note">Players with the same name as someone already in ' + esc(S.group.name) + ' are treated as the same person. Restoring the same file twice adds nothing the second time.</p>' +
+      (nothing ? '<p class="note"><b>Everything in this backup is already here.</b></p><button class="btn ghost" data-act="close">Close</button>'
+        : '<button class="btn big" data-act="import-yes">Add to ' + esc(S.group.name) + '</button><button class="btn ghost" data-act="close">Cancel</button>'));
+  }
+
   /* ---------- actions ---------- */
   var A = {
     nav: function (el) { go(el.dataset.to); },
@@ -294,6 +392,23 @@
     },
     'share-invite': function () {
       try { navigator.share({ title: 'Join ' + S.group.name + ' on Dice Tracker', url: S.inviteLink })['catch'](function () { }); } catch (e) { }
+    },
+    'export': function () {
+      if (!window.URL || !URL.createObjectURL) return toast('Backups need a regular browser.');
+      var blob = new Blob([JSON.stringify(backupData(), null, 1)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'dice-tracker-' + slug(S.group.name) + '-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      store_set('plunk.lastBackup.' + S.gid, String(Date.now()));
+      render(); toast('Backup downloaded');
+    },
+    'import-yes': function () {
+      var plan = S.importPlan; S.importPlan = null; closeSheet();
+      if (!plan) return;
+      applyImport(plan);
+      toast('Restored ' + L.plural(plan.players.length, 'player') + ' and ' + L.plural(plan.games.length, 'game'));
     },
     'banner-x': function (el) { if (el.dataset.remember) store_set(el.dataset.remember, '1'); banner(''); },
     'switch-group': function () {
@@ -333,6 +448,7 @@
       S.draft.teams = [[all[0], all[1]], [all[2], all[3]]]; keepDraft(); render();
     },
     'start-game': function () {
+      keepData();
       var t = S.draft.teams, keep = S.draft.scorer;
       var keeper = keep == null ? S.claimedPid : (keep || null);
       var g = L.newGame({
@@ -522,6 +638,17 @@
   };
 
   var CHANGES = {
+    'import-file': function (el) {
+      var file = el.files && el.files[0];
+      if (!file) return;
+      var r = new FileReader();
+      r.onload = function () {
+        try { importSheet(planImport(JSON.parse(r.result))); }
+        catch (e) { banner('That file isn’t a Dice Tracker backup. Choose the .json file from “Download backup”.'); }
+        el.value = '';
+      };
+      r.readAsText(file);
+    },
     'draft-def': function (el) { S.draft.defense = el.checked; keepDraft(); },
     'ed-def': function (el) { S.edit.defense = el.checked; render(); },
     'ed-date': function (el) {
@@ -621,6 +748,7 @@
     }
     S.pendingJoin = sess_get('plunk.join') || '';
     S.authMode = 'in';
+    registerOffline();
     render();
     var slow = setTimeout(function () {
       if (!S.ready) { var l = $('loading'); if (l) l.innerHTML = '<b>Still connecting…</b><span>The shared database isn’t answering yet. Check your connection — this page keeps trying.</span>'; }
@@ -629,8 +757,17 @@
       if (r.why === 'cloud-failed') { clearTimeout(slow); S.fatal = (r.error && r.error.message) || 'Something went wrong.'; render(); return; }
       store = r.store; S.storeKind = store.kind;
       if (store.onPending) store.onPending(function (n, off) {
-        var was = S.offline; S.offline = !!off; savingText();
-        if (was !== S.offline) $('top').innerHTML = V.top(S);
+        var was = S.offline + '|' + (S.offline ? S.unsynced : 0);
+        S.offline = !!off; S.unsynced = store.outboxCount ? store.outboxCount() : 0; savingText();
+        if (was !== S.offline + '|' + (S.offline ? S.unsynced : 0)) $('top').innerHTML = V.top(S);
+      });
+      if (store.onStale) store.onStale(function (table, id, gid) {
+        if (gid !== S.gid) return;
+        banner(table === 'games'
+          ? 'Another phone saved this game more recently, so its version was kept. Taps this phone made while it was offline weren’t added.'
+          : 'Another phone saved newer details for this player, so those were kept.');
+        delete S.local[id];
+        if (store.reload) store.reload(gid);
       });
       if (store.onWriteError) store.onWriteError(function () { });
       if (store.kind === 'cloud') {
@@ -651,6 +788,6 @@
       });
     });
   }
-  P.app = { S: S, A: A, FORMS: FORMS, render: render, boot: boot, game: game };
+  P.app = { S: S, A: A, FORMS: FORMS, render: render, boot: boot, game: game, backupData: backupData, planImport: planImport, applyImport: applyImport };
   if (!window.PLUNK_NO_BOOT) boot();
 })(window.PLUNK);

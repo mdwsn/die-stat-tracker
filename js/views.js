@@ -76,12 +76,15 @@
       return '<button data-act="nav" data-to="' + t[0] + '"' + (S.route === t[0] ? ' aria-current="page"' : '') + '>' + icon(t[0]) + '<span>' + t[1] + '</span></button>';
     }).join('');
     var shared = S.storeKind === 'shared' || S.storeKind === 'cloud';
-    var status = S.storeKind === 'cloud' ? (S.offline ? 'Offline · changes will sync' : 'Synced · updates live') : shared ? 'Shared · updates live' : 'Saved in this browser';
+    var status = S.storeKind === 'cloud'
+      ? (S.offline ? 'Offline · ' + (S.unsynced ? L.plural(S.unsynced, 'change') + ' to upload' : 'changes will sync') : 'Synced · updates live')
+      : shared ? 'Shared · updates live' : 'Saved in this browser';
     var onPlay = S.route === 'play' && !S.view;
     return '<button class="ws" data-act="switch-group" aria-label="Switch group"><span class="die" aria-hidden="true"></span><span class="ws-name">' + esc(g.name) + '</span>' + icon('updown') + '</button>' +
       (S.canWrite ? '<button class="btn wide side-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '') +
       '<nav class="side-nav" aria-label="Sections">' + nav + '</nav>' +
       '<div class="side-foot' + (!shared ? ' device' : S.offline ? ' offline' : '') + '"><span class="dot"></span>' + status + '</div>' +
+      (S.offline ? '<span class="sync-pill" role="status">Offline' + (S.unsynced ? ' · ' + S.unsynced + ' to upload' : '') + '</span>' : '') +
       (S.canWrite && !onPlay ? '<button class="btn sm top-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '');
   };
   V.tabs = function (S) {
@@ -514,6 +517,14 @@
       (S.canWrite ? '<div><button class="btn" type="submit">Save rules</button></div>' : '') + '</form>' +
       '<div class="stack">' +
       '<section class="card pad stack"><div class="hgroup"><h2>Pledge class</h2></div>' + pledgeBody + '</section>' +
+      (S.storeKind === 'shared' ? '' :
+        '<section class="card pad stack"><div class="hgroup"><h2>Backup</h2><p class="sub">Download every player and game as one file, to keep or to move to another phone. Restoring adds anything missing and keeps the newer copy of anything in both.</p></div>' +
+        '<div class="row"><button class="btn ghost" data-act="export">Download backup</button>' +
+        (S.canWrite ? '<label class="btn ghost" for="import-file">Restore from a file…</label><input type="file" id="import-file" accept=".json,application/json" data-change="import-file" hidden>' : '') + '</div>' +
+        '<p class="legend">' + (S.lastBackup ? 'Last downloaded on this device: ' + esc(V.when(S.lastBackup)) + '.' : 'No backup downloaded on this device yet.') + '</p></section>') +
+      (S.standalone || S.storeKind === 'shared' ? '' :
+        '<section class="card pad stack"><div class="hgroup"><h2>Put it on your home screen</h2><p class="sub">It opens like an app, full screen, and still opens with no signal.</p></div>' +
+        '<p class="note"><b>iPhone:</b> in Safari, tap Share, then Add to Home Screen.<br><b>Android:</b> in Chrome, tap the ⋮ menu, then Install app.</p></section>') +
       (S.storeKind === 'cloud'
         ? '<section class="card pad stack"><div class="hgroup"><h2>Invite people</h2><p class="sub">Send this link in the group chat. Anyone who opens it and signs in joins ' + esc(g.name) + ' and can log games.</p></div>' +
           (S.inviteLink ? '<div class="invite"><span id="invite-link">' + esc(S.inviteLink) + '</span></div>' +
