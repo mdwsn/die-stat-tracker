@@ -24,6 +24,8 @@
     shuffle: '<path d="m18 4 3 3-3 3"/><path d="m18 14 3 3-3 3"/><path d="M3 7h3.5a4 4 0 0 1 3.3 1.8l4.4 6.4a4 4 0 0 0 3.3 1.8H21"/><path d="M3 17h3.5a4 4 0 0 0 3.3-1.8l.7-1M13.5 9.8l.7-1A4 4 0 0 1 17.5 7H21"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
+    crown: '<path d="m3 7.5 4.5 4L12 5l4.5 6.5L21 7.5 19 18H5z"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     tv: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 3.9M16 6h2.5a2.5 2.5 0 0 1-2.6 3.9"/><path d="M12 13v3M9 20h6M10 16h4l.5 4h-5z"/>',
     shield: '<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/>',
@@ -141,7 +143,7 @@
     var recent = S.games.filter(function (g) { return g.status === 'final'; }).slice(0, 3);
     var r = S.rules;
     var out = pageHead('Play', 'First to ' + r.target + ', win by ' + r.winBy + (Number(r.plunkPts) !== 1 ? ' · a sink is worth ' + r.plunkPts : ''));
-    if (live.length) out += '<section class="section"><div class="section-h"><h2>Live now</h2></div><div class="games-list">' + live.map(function (g) { return gameCard(S, g); }).join('') + '</div></section>';
+    if (live.length) out += live.map(function (g) { return liveHero(S, g); }).join('');
     out += newGamePanel(S, S.draft);
     if (recent.length) out += '<section class="section"><div class="section-h"><h2>Recent games</h2><button class="link" data-act="nav" data-to="games">View all</button></div><div class="games-list">' + recent.map(function (g) { return gameCard(S, g); }).join('') + '</div></section>';
     return out;
@@ -174,6 +176,7 @@
       })() +
       '<div class="row between">' + seg('draft-mode', d.mode, [['table', 'All four'], ['throw', 'Throw by throw']], 'Logging style') +
       '<label class="check"><input type="checkbox" id="draft-def" data-change="draft-def"' + (d.defense ? ' checked' : '') + '> Track catches &amp; drops</label></div>' +
+      (S.players.filter(function (p) { return !p.archived; }).length < 4 ? '<p class="note"><b>A game needs four players.</b> Tap a seat and type a name; anyone new is registered on the spot.</p>' : '') +
       '<p class="note">' + (d.mode === 'table'
         ? 'All four players on screen. Tap what each throw did under the person who threw it.'
         : 'One thrower at a time, in order. One tap per throw, the fastest way to keep up live.') + '</p>' +
@@ -203,11 +206,34 @@
     var ws = L.winState(g);
     var flag = ws.done ? '<span class="gp-flag done">Game</span>' : ws.point !== null ? '<span class="gp-flag">Game point</span>' : '<span class="lab">To ' + g.rules.target + '</span>';
     return '<div class="scorebar">' +
-      '<div class="t"><span class="lab">' + dot(0) + 'Team 1</span><span class="names">' + teamNames(S, g, 0) + '</span><span class="sc">' + ws.a + '</span></div>' +
+      '<div class="t"><span class="lab">' + dot(0) + 'Team 1</span><span class="names">' + teamNames(S, g, 0) + '</span><span class="sc" data-tick="sc:' + esc(g.id) + ':0">' + ws.a + '</span></div>' +
       '<div class="mid">' + flag + '<span class="saving" id="saving"></span></div>' +
-      '<div class="t right"><span class="lab">Team 2' + dot(1) + '</span><span class="names">' + teamNames(S, g, 1) + '</span><span class="sc">' + ws.b + '</span></div>' +
-      '</div>';
+      '<div class="t right"><span class="lab">Team 2' + dot(1) + '</span><span class="names">' + teamNames(S, g, 1) + '</span><span class="sc" data-tick="sc:' + esc(g.id) + ':1">' + ws.b + '</span></div>' +
+      upRow(S, g) + '</div>';
   }
+  function upRow(S, g) {
+    var up = g.status === 'live' ? L.nextUp(g) : null;
+    if (!up) return '';
+    return '<div class="up-row"><span class="lab">' + (g.mode === 'throw' ? 'Throwing' : 'Up next') + '</span><b>' + esc(nameOf(S, up)) + '</b>' + dot(L.teamOf(g, up)) + '</div>';
+  }
+  /* The big card on Play while a game is going: anyone can hop in from their phone. */
+  function liveHero(S, g) {
+    var ws = L.winState(g), up = L.nextUp(g), lp = lastPlay(S, g);
+    var scoring = L.canScore(g, S.me, S.canWrite, S.helping);
+    return '<section class="live-hero"><div class="lh-top"><span class="chip live">Live now</span>' +
+      '<span class="lab">' + (ws.point !== null ? 'Game point · ' : '') + esc(when(g.started || g.created)) + '</span></div>' +
+      '<div class="lh-lines">' +
+      '<span class="lh-team">' + dot(0) + '<span>' + teamNames(S, g, 0) + '</span></span><span class="lh-num" data-tick="hero:' + esc(g.id) + ':0">' + ws.a + '</span>' +
+      '<span class="lh-team">' + dot(1) + '<span>' + teamNames(S, g, 1) + '</span></span><span class="lh-num" data-tick="hero:' + esc(g.id) + ':1">' + ws.b + '</span>' +
+      '</div>' +
+      (up || lp ? '<p class="note">' + (up ? 'Up next: <b>' + esc(nameOf(S, up)) + '</b>' : '') + (up && lp ? ' · ' : '') + (lp ? 'Last play: ' + lp : '') + '</p>' : '') +
+      '<button class="btn big wide" data-act="open-game" data-id="' + esc(g.id) + '">' + (scoring ? 'Keep scoring' : 'Watch live') + '</button></section>';
+  }
+  /* What the page will look like, pulsing, while data is on its way. */
+  V.skeleton = function () {
+    return '<div class="skeleton" id="loading" aria-busy="true" aria-label="Loading"><div class="sk sk-title"></div><div class="sk sk-line"></div>' +
+      '<div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card short"></div></div>';
+  };
   function ago(ts) {
     var s = Math.max(0, Math.round((Date.now() - (ts || 0)) / 1000));
     if (s < 10) return 'just now';
@@ -252,7 +278,7 @@
     var status = g.status === 'final' ? 'Final' : ws.done ? 'Game' : ws.point !== null ? 'Game point' : 'First to ' + g.rules.target;
     function side(ti, score) {
       return '<div class="tv-side"><div class="tv-team">' + dot(ti) + '<span>' + teamNames(S, g, ti) + '</span></div>' +
-        '<div class="tv-score">' + score + '</div><div class="tv-players">' + g.teams[ti].map(function (pid) {
+        '<div class="tv-score" data-tick="tv:' + esc(g.id) + ':' + ti + '">' + score + '</div><div class="tv-players">' + g.teams[ti].map(function (pid) {
           var st = g.stats[pid] || {};
           return '<span>' + esc(nameOf(S, pid)) + ' · <b>' + L.pointsOf(st, g.rules) + '</b> pts · ' + L.throwsOf(st) + ' throws</span>';
         }).join('') + '</div></div>';
@@ -287,18 +313,19 @@
     }).join('') + '</div></div>';
   }
   function tableMode(S, g) {
-    var gaps = L.throwGaps(g);
+    var gaps = L.throwGaps(g), up = L.nextUp(g);
     function seat(ti, si) {
       var pid = g.teams[ti][si], st = g.stats[pid] || L.blankStats(), gap = gaps[pid] || 0;
       var taps = P.OUTCOMES.map(function (o) {
         return '<button class="tap' + (o.points ? ' score' : '') + '" data-act="tap" data-p="' + esc(pid) + '" data-k="' + o.k + '" title="' + esc(o.hint) + '">' +
-          '<span class="n">' + (st[o.k] || 0) + '</span><span class="l">' + esc(o.tap) + '</span></button>';
+          '<span class="n" data-tick="tap:' + esc(g.id) + ':' + esc(pid) + ':' + o.k + '">' + (st[o.k] || 0) + '</span><span class="l">' + esc(o.tap) + '</span></button>';
       }).join('');
       var def = g.defense ? '<div class="def-row"><span class="lab">Defense</span><div class="taps">' + P.DEFENSE.map(function (d) {
         return '<button class="tap def" data-act="tap" data-p="' + esc(pid) + '" data-k="' + d.k + '" title="' + esc(d.hint) + '">' +
           '<span class="n">' + (st[d.k] || 0) + '</span><span class="l">' + esc(d.tap) + '</span></button>';
       }).join('') + '</div></div>' : '';
-      return '<div class="seat"><div class="seat-h">' + dot(ti) + '<span class="nm">' + esc(nameOf(S, pid)) + '</span>' +
+      return '<div class="seat' + (pid === up ? ' up' : '') + '"><div class="seat-h">' + dot(ti) + '<span class="nm">' + esc(nameOf(S, pid)) + '</span>' +
+        (pid === up ? '<span class="up-chip">Up</span>' : '') +
         '<span class="thr' + (gap > P.EVEN_TOLERANCE ? ' behind' : '') + '">' + L.throwsOf(st) + ' thr</span></div>' +
         '<div class="taps">' + taps + '</div>' + def + '</div>';
     }
@@ -454,7 +481,10 @@
       seg('who', ui.who, [['all', 'Everyone'], ['brothers', 'Members'], ['pledges', 'Pledges']], 'Who') + '</div>';
     var played = B.filter(function (r) { return r.gp > 0; });
     if (!played.length) {
-      return head + filters + '<div class="empty"><b>No finished games in this period</b><span>Rankings and awards appear after the first game is finished.</span><button class="btn" data-act="nav" data-to="play">New game</button></div>';
+      var older = ui.period !== 'all' && S.games.some(function (g) { return g.status === 'final'; });
+      return head + filters + (older
+        ? '<div class="empty"><b>Nothing finished in ' + esc(periodLabel.toLowerCase()) + '</b><span>Older games are still on the board under All time.</span><button class="btn" data-act="period" data-v="all">Show all time</button></div>'
+        : '<div class="empty"><b>No finished games yet</b><span>Finish a game and the rankings and awards fill in here, live.</span><button class="btn" data-act="nav" data-to="play">Start a game</button></div>');
     }
     var aw = S.awards.map(function (a) {
       var names = a.pids.map(function (pid) { return esc(nameOf(S, pid)); }).join(' &amp; ');
@@ -471,9 +501,10 @@
       return '<th class="' + (c.g ? 'grp' : '') + '"' + s + '><button data-act="sort" data-k="' + c.k + '" title="Sort by ' + esc(c.title) + '">' + c.t + '</button></th>';
     }).join('') + '</tr>';
     var body = played.map(function (r, i) {
-      var p = S.byId[r.pid] || {};
-      return '<tr class="' + (r.gp < P.MIN_GAMES ? 'dim' : '') + '"><td class="pl"><button data-act="open-player" data-id="' + esc(r.pid) + '">' +
-        '<span class="rk">' + (i + 1) + '</span>' + av(p, 'sm') + '<span class="nm">' + esc(p.nick || p.name || '?') + '</span>' +
+      var p = S.byId[r.pid] || {}, thin = r.gp < P.MIN_GAMES, medal = !thin && i < 3;
+      return '<tr data-pid="' + esc(r.pid) + '" class="' + (thin ? 'dim' : medal ? 'top' + (i + 1) : '') + '"><td class="pl"><button data-act="open-player" data-id="' + esc(r.pid) + '">' +
+        '<span class="rk">' + (medal ? '<span class="medal m' + (i + 1) + '">' + (i + 1) + '</span>' : (i + 1)) + '</span>' + av(p, 'sm') + '<span class="nm">' + esc(p.nick || p.name || '?') + '</span>' +
+        (medal && i === 0 ? '<svg class="ic crown" viewBox="0 0 24 24" aria-label="First place">' + ICONS.crown + '</svg>' : '') +
         (p.pledge ? '<span class="chip pledge">P</span>' : '') + '</button></td>' +
         cols.map(function (c) { return '<td class="' + (c.g ? 'grp ' : '') + (ui.sort === c.k ? 'hl' : '') + '">' + c.f(r) + '</td>'; }).join('') + '</tr>';
     }).join('');
@@ -578,6 +609,8 @@
       (S.canWrite ? '<div><button class="btn" type="submit">Save rules</button></div>' : '') + '</form>' +
       '<div class="stack">' +
       '<section class="card pad stack"><div class="hgroup"><h2>Pledge class</h2></div>' + pledgeBody + '</section>' +
+      '<section class="card pad stack"><div class="hgroup"><h2>Appearance</h2><p class="sub">Dark is easier on the eyes in a dim room. Saved on this device.</p></div>' +
+      seg('theme', S.theme || 'dark', [['dark', 'Dark'], ['light', 'Light']], 'Theme') + '</section>' +
       (S.storeKind === 'shared' ? '' :
         '<section class="card pad stack"><div class="hgroup"><h2>Backup</h2><p class="sub">Download every player and game as one file, to keep or to move to another phone. Restoring adds anything missing and keeps the newer copy of anything in both.</p></div>' +
         '<div class="row"><button class="btn ghost" data-act="export">Download backup</button>' +

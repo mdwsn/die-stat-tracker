@@ -160,6 +160,8 @@ ok($$('.tap[data-k="sht"]').length === 4 && /Fair hit/.test(view()) && /Short hi
 console.log('\n§4 Logging — table mode');
 const J = ids['Jake Miller'], R = ids['Ryan Cole'], M = ids['Matt Price'], C = ids['Chris Diaz'], SAM = ids['Sam Ortiz'];
 function tap(pid, k, n) { for (let i = 0; i < (n || 1); i++) click(`.tap[data-p="${pid}"][data-k="${k}"]`); }
+const buzzes = [];
+Object.defineProperty(w.navigator, 'vibrate', { configurable: true, value: (ms) => { buzzes.push(ms); return true; } });
 const liveId = S.view.id;
 click('[data-act="nav"][data-to="board"]');
 ok($('.live-bar') && /Live/.test($('.live-bar').textContent), 'while a game is going, other screens show a Live bar');
@@ -173,6 +175,10 @@ click('[data-act="undo"]');
 ok(live().stats[M].ctc === 0 && live().stats[J].mis === 1, 'undo reverses exactly the last tap');
 tap(J, 'snk', 1);
 ok(L.teamScore(live(), 0) === 4, 'a sink scores the house sink value');
+ok(buzzes.length >= 8 && buzzes.every(ms => ms === 10), 'every scoring tap gives a short buzz where the phone supports it');
+ok(P.app.ticks['sc:' + live().id + ':0'] === 4, 'the score ticker tracks the number on screen, so the next change can roll in');
+ok(/Up next/.test($('.scorebar .up-row').textContent) && /Matt/.test($('.scorebar .up-row').textContent), 'the pinned scorebar says who’s up (whoever has thrown least, in order)');
+ok($('.seat.up') && /Matt/.test($('.seat.up').textContent) && $('.seat.up .up-chip'), 'and their seat is marked Up');
 
 console.log('\n§5 Throw-by-throw mode');
 click('[data-act="live-mode"][data-v="throw"]');
@@ -218,6 +224,9 @@ ok(g1.scorer === SAM && g1.scorerPledge === true, 'the game records who kept the
 ok(S.draft.scorer === SAM, 'the next game remembers who keeps stats');
 const sentences = g1.summary.split(/(?<=\.)\s+/);
 ok(sentences.length === 2 && /7–3/.test(g1.summary), 'recap is exactly two sentences with the score', g1.summary);
+ok(S.celebrated[g1.id] === true, 'the winners get their one shot of confetti');
+P.app.render(); P.app.render();
+ok(Object.keys(S.celebrated).length === 1, 'and only once, however often the screen redraws');
 console.log('     recap: ' + g1.summary);
 
 console.log('\n§9 Leaderboard');
@@ -227,6 +236,8 @@ ok(row(J).thr === 9 && row(J).w === 1, 'Jake: 9 throws (5 points, 2 fair hits, 1
 ok(row(R).gp === 1 && row(R).w === 1 && row(SAM).w === 1, 'subbed-out and subbed-in players both credited');
 ok(row(M).l === 1, 'losers get the loss');
 ok($('table.stats') && /Throws/.test($('table.stats').textContent), 'board shows a Throws column');
+ok($$('table.stats tbody tr[data-pid]').length === S.boardRows.filter(r => r.gp > 0).length, 'every ranked row carries its player, so rows can slide when ranks change');
+ok(!$('.medal'), 'no medals until players have enough games to qualify');
 ok(!/pl[iou]nk/i.test(view()) && /Fair table/.test(view()) && /Short table/.test(view()), 'leaderboard uses the house stat names');
 ok(row(M).pledgeLine.gp === 1, 'Matt’s game counts in his pledge split');
 ok(S.awards.some(a => a.key === 'stat' && a.pids[0] === SAM) && /Best Pledge Statistician/.test(view()), 'Best Pledge Statistician goes to the pledge who tracked the game');
@@ -290,6 +301,15 @@ const aw = L.awards(rows, S.games.concat(extra), 'all');
 ok(aw.find(a => a.key === 'mvp') && aw.find(a => a.key === 'mvp').pids[0] === J, 'MVP goes to the player carrying the scoring', aw.map(a => a.key));
 ok(aw.find(a => a.key === 'iron'), 'Iron Man present');
 ok(!L.awards(L.leaderboard([], S.players, 'all'), [], 'all').length, 'no games → no awards (nothing invented)');
+
+click('[data-act="nav"][data-to="group"]');
+click('[data-act="theme"][data-v="light"]');
+ok(d.documentElement.getAttribute('data-theme') === 'light' && w.localStorage.getItem('dt.theme') === 'light', 'House → Appearance switches to light, and remembers it');
+click('[data-act="theme"][data-v="dark"]');
+ok(!d.documentElement.hasAttribute('data-theme') && w.localStorage.getItem('dt.theme') === 'dark', 'and back to dark, the default');
+S.groupReady = false; P.app.render();
+ok($('.skeleton') && !/No players yet|No games yet/.test(view()), 'while a group is still loading, the page shows placeholders, not a fake empty state');
+S.groupReady = true; P.app.render();
 
 console.log('\n§13 Pledges');
 click('[data-act="nav"][data-to="group"]');
@@ -404,8 +424,9 @@ const LIVE2 = startGame(A1);
 A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
 await settle();
 ok(A2.S.games.some(g => g.id === LIVE2 && g.stats[JK].pt === 1), 'a tap on one phone shows up on the other, live');
-ok(A2.q('.live-bar') && /Watch/.test(A2.q('.live-bar').textContent), 'the other phone shows a Live bar to hop in');
-A2.click('.live-bar');
+ok(A2.q('.live-hero') && /Live now/.test(A2.q('.live-hero').textContent) && /Watch live/.test(A2.q('.live-hero').textContent), 'the other phone’s Play screen shows a Live now card to hop in');
+ok(/Up next: /.test(A2.q('.live-hero').textContent), 'with who’s up next');
+A2.click('.live-hero [data-act="open-game"]');
 ok(A2.S.view.kind === 'watch' && !A2.q('.tap') && /Watching live/.test(A2.view()), 'opening someone else’s live game watches it, with no scoring buttons to collide');
 A1.click(`.tap[data-p="${MP}"][data-k="sht"]`);
 await settle();

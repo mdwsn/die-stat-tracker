@@ -78,6 +78,7 @@ lose that column. Change its `label` instead.
 | `tests/fake-supabase.js` | An in-memory stand-in for Supabase so the tests can run the website path |
 | `SETUP.md` | Step-by-step: putting the site online |
 | `ROADMAP.md` | The plan: foundations, one great house, many houses, a business |
+| `UI.md` | What the latest design pass changed, and where it lives in the code |
 | `sw.js` | Lets the site open with no signal by keeping a copy of the app's files on the phone |
 | `manifest.webmanifest`, `icons/` | What a phone needs to install it on the home screen. `tools/make-icons.py` redraws the icons |
 

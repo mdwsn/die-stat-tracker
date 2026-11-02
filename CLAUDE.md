@@ -76,7 +76,7 @@ fixable. The README covers the user-facing feature list.
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 123 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 135 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.
@@ -90,7 +90,18 @@ Circle (a Linear-style UI). The rules, all set as tokens at the top of `app.css`
   columns, the MVP card and **Team 1's marker**. Team 2's marker is ink (`--fg`), not a second hue.
   Green/amber/red are status only (live, game point, behind on throws), never decoration.
 - **4px spacing scale** (`--s1`…`--s10`). **Radius 8px on controls, 12px on cards/sheets.** No pills.
-- Hairline zinc borders and the faintest shadows. **No glow, no gradients, no glassmorphism/blur.**
+- Hairline zinc borders and the faintest shadows. No glow, no rainbow gradients, no emoji.
+- **Updated by the polish brief (see UI.md):** **dark is the default** (bare `:root` = dark;
+  `[data-theme="light"]` = light, chosen in House → Appearance, stored as `dt.theme`, applied by an inline
+  script in index.html before first paint). **Glass is allowed only on chrome that floats over content**
+  (top bar, tabs, scorebar, sheets, toast, Live now card), never on every card. There's one faint accent
+  wash at the top of the page.
+- **Motion system:** `--dur-1/2/3` = 150/200/250 ms, `--ease`, and a short `--spring`. Ticker
+  (`data-tick`), leaderboard FLIP (`tr[data-pid]`) and confetti all run from `render()` and all stop under
+  `prefers-reduced-motion` (the preview browser has it on, so motion can't be eyeballed there). **Entry
+  motion only on navigation** (`render(true)` from `go()`/`open()`); a tap must never re-animate the screen.
+  Confetti fires once per game (`S.celebrated`) on the live→final transition of the game on screen, and
+  not on a tie.
 - Layout: phone = top bar + bottom tabs; 900px+ = 240px sidebar (group switcher, New game, nav,
   storage status). `.app.solo` (no group yet) has no sidebar.
 - Dense leaderboard: 40px rows, 13px text, sticky header + sticky player column; awards are compact cards.

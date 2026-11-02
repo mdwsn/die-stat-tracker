@@ -17,7 +17,7 @@
   var S = P.S = {
     ready: false, route: 'play', view: null, groups: [], gid: null, group: null,
     players: [], games: [], byId: {}, rules: clone(P.DEFAULT_RULES), local: {},
-    draft: null, edit: null, pick: null, helping: {},
+    draft: null, edit: null, pick: null, helping: {}, celebrated: {}, groupReady: false,
     ui: { period: 'season', who: 'all', sort: 'impact', dir: -1, playerQ: '' },
     canWrite: true, me: null, claimed: false, storeKind: 'device',
     boardRows: [], awards: [], allRows: {}
@@ -58,6 +58,7 @@
     S.claimedPid = mine ? mine.id : null;
     S.inviteLink = S.group && S.group.joinCode && store && store.siteUrl ? store.siteUrl() + '?join=' + S.group.joinCode : '';
     S.canShare = !!(navigator.share);
+    S.theme = store_get('dt.theme') === 'light' ? 'light' : 'dark';
     S.lastBackup = S.gid ? +(store_get('plunk.lastBackup.' + S.gid) || 0) : 0;
     try { S.standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch (e) { S.standalone = false; }
     if (S.players.length && S.draft.scorer && !(S.byId[S.draft.scorer] && !S.byId[S.draft.scorer].archived)) S.draft.scorer = null;
@@ -83,7 +84,7 @@
   }
   /* Score a live game here only if you started it (or chose "Help score").
      Everyone else watches, so two phones never fight over one game. */
-  function scoringHere(g) { return S.canWrite && (!g.by || g.by === S.me || !!S.helping[g.id]); }
+  function scoringHere(g) { return L.canScore(g, S.me, S.canWrite, S.helping); }
   function game(id) { return S.games.filter(function (g) { return g.id === id; })[0] || null; }
   function nameOf(pid) { var p = S.byId[pid]; return p ? (p.nick || p.name) : 'Unknown'; }
 
@@ -122,12 +123,13 @@
   function selectGroup(gid) {
     if (unGroup) { unGroup(); unGroup = null; }
     S.gid = gid; S.group = S.groups.filter(function (g) { return g.id === gid; })[0] || null;
-    S.players = []; S.games = []; S.local = {}; S.view = null;
+    S.players = []; S.games = []; S.local = {}; S.view = null; S.groupReady = !gid;
     store_set('plunk.gid', gid || '');
     if (!gid) { derive(); render(); return; }
     var d = store_get('plunk.draft.' + gid);
     try { S.draft = d ? JSON.parse(d) : blankDraft(); } catch (e) { S.draft = blankDraft(); }
     unGroup = store.listenGroup(gid, function (data) {
+      S.groupReady = true;
       S.players = data.players;
       S.games = mergeGames(data.games);
       derive(); render();
@@ -137,7 +139,96 @@
   function keepDraft() { if (S.gid) store_set('plunk.draft.' + S.gid, JSON.stringify(S.draft)); }
 
   /* ---------- render ---------- */
-  function render() {
+  /* ---------- motion: short, springy, and off when the phone asks for reduced motion ---------- */
+  function calm() { return !window.requestAnimationFrame || !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  var ticks = {}, seenStatus = {};
+  /* number ticker: a score that moved by one rolls in; a bigger jump counts up over 250 ms */
+  function runTicks() {
+    var els = document.querySelectorAll('[data-tick]'), still = calm();
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i], key = el.getAttribute('data-tick'), to = parseFloat(el.textContent), from = ticks[key];
+      ticks[key] = to;
+      if (still || from == null || from === to || !isFinite(from) || !isFinite(to)) continue;
+      if (Math.abs(to - from) === 1) el.classList.add(to > from ? 'tick-up' : 'tick-down');
+      else countUp(el, from, to);
+    }
+  }
+  function countUp(el, from, to) {
+    var t0 = performance.now();
+    el.textContent = from;
+    requestAnimationFrame(function step(t) {
+      var k = Math.min(1, (t - t0) / 250), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = Math.round(from + (to - from) * e);
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    });
+  }
+  /* leaderboard: remember where each row was, then slide it from there to where it is now (FLIP) */
+  function measureRows() {
+    if (S.route !== 'board' || S.view || calm()) return null;
+    var rows = document.querySelectorAll('#view tr[data-pid]'), m = {};
+    for (var i = 0; i < rows.length; i++) m[rows[i].getAttribute('data-pid')] = rows[i].getBoundingClientRect().top;
+    return rows.length ? m : null;
+  }
+  function playRows(before) {
+    if (!before) return;
+    var rows = document.querySelectorAll('#view tr[data-pid]'), moved = [];
+    for (var i = 0; i < rows.length; i++) {
+      var tr = rows[i], top = before[tr.getAttribute('data-pid')];
+      if (top == null) continue;
+      var dy = top - tr.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1) continue;
+      tr.style.transition = 'none'; tr.style.transform = 'translateY(' + dy + 'px)'; moved.push(tr);
+    }
+    if (moved.length) requestAnimationFrame(function () { requestAnimationFrame(function () {
+      moved.forEach(function (tr) { tr.style.transition = 'transform var(--dur-3) var(--spring)'; tr.style.transform = ''; tr.classList.add('moved'); });
+    }); });
+  }
+  /* one shot of confetti for the winners, the moment the game on screen goes final */
+  function checkFinish() {
+    var g = S.view && game(S.view.id);
+    if (!g) return;
+    var before = seenStatus[g.id]; seenStatus[g.id] = g.status;
+    if (before === 'live' && g.status === 'final' && !S.celebrated[g.id]) {
+      var w = L.winnerOf(g);
+      if (w === null) return;                       // a tie gets no confetti
+      S.celebrated[g.id] = true;
+      if (!calm()) confetti(w === 0 ? 0.3 : 0.7);
+    }
+  }
+  function confetti(xFrac) {
+    var c = document.createElement('canvas'), ctx = c.getContext && c.getContext('2d');
+    if (!ctx) return;
+    var W = window.innerWidth, H = window.innerHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = W * dpr; c.height = H * dpr; c.className = 'confetti'; c.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(c); ctx.scale(dpr, dpr);
+    var css = getComputedStyle(document.documentElement);
+    var colors = [css.getPropertyValue('--accent').trim(), css.getPropertyValue('--accent-text').trim(), css.getPropertyValue('--fg').trim(), css.getPropertyValue('--faint').trim()];
+    var bits = [];
+    for (var i = 0; i < 110; i++) {
+      var a = (-90 + (Math.random() - 0.5) * 75) * Math.PI / 180, v = 8 + Math.random() * 8;
+      bits.push({ x: W * xFrac, y: H * 0.6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.35, w: 5 + Math.random() * 4, h: 8 + Math.random() * 6, c: colors[i % colors.length] });
+    }
+    var t0 = performance.now(), life = 1700;
+    requestAnimationFrame(function frame(t) {
+      var age = t - t0;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = Math.max(0, 1 - age / life);
+      bits.forEach(function (b) {
+        b.vy += 0.3; b.vx *= 0.985; b.vy *= 0.985; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c;
+        ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.max(0.2, Math.abs(Math.cos(b.r * 2))));
+        ctx.restore();
+      });
+      if (age < life) requestAnimationFrame(frame); else c.remove();
+    });
+  }
+  function applyTheme(v) {
+    if (v === 'light') document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
+    var m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', v === 'light' ? '#ffffff' : '#09090b');
+  }
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(10); } catch (e) { } }
+
+  function render(enter) {
     var active = document.activeElement, focusId = active && active.id, sel = null;
     try { sel = focusId && active.selectionStart != null ? [active.selectionStart, active.selectionEnd] : null; } catch (e) { }
     $('top').innerHTML = V.top(S);
@@ -147,8 +238,9 @@
     var html;
     if (S.fatal) html = '<div class="empty"><b>Can’t start Dice Tracker</b><span>' + esc(S.fatal) + '</span><button class="btn" data-act="reload">Try again</button></div>';
     else if (S.needAuth) html = V.signin(S);
-    else if (!S.ready) html = '<div class="empty" id="loading"><b>Loading…</b><span>Getting your groups.</span></div>';
+    else if (!S.ready) html = V.skeleton();
     else if (!S.group) html = V.welcome(S);
+    else if (!S.groupReady && !S.view) html = V.skeleton();
     else if (S.view && S.view.kind === 'edit' && S.edit) html = V.editGame(S, S.edit);
     else if (S.view && S.view.kind === 'tv' && game(S.view.id)) html = V.tv(S, game(S.view.id));
     else if (S.view && (S.view.kind === 'live' || S.view.kind === 'watch') && game(S.view.id) && game(S.view.id).status === 'live')
@@ -156,8 +248,13 @@
     else if (S.view && /^(game|live|watch)$/.test(S.view.kind) && game(S.view.id)) html = V.game(S, game(S.view.id));
     else if (S.view && S.view.kind === 'player' && S.byId[S.view.id]) html = V.player(S, S.byId[S.view.id]);
     else { S.view = null; html = V[S.route] ? V[S.route](S) : V.play(S); }
-    if (S.group && S.ready && !S.needAuth && !(S.view && /^(live|watch|tv|edit)$/.test(S.view.kind))) html = V.liveBar(S) + html;
-    $('view').innerHTML = html;
+    if (S.group && S.ready && S.groupReady && !S.needAuth && !(S.view && /^(live|watch|tv|edit)$/.test(S.view.kind)) && !(S.route === 'play' && !S.view)) html = V.liveBar(S) + html;
+    var rowsBefore = measureRows();
+    var view = $('view');
+    view.innerHTML = html;
+    if (enter && !calm()) { view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter'); }
+    else view.classList.remove('enter');          // never on a tap: the screen must not re-fly every throw
+    playRows(rowsBefore); runTicks(); checkFinish();
     if (focusId && $(focusId)) {
       var el = $(focusId); el.focus();
       if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { }
@@ -171,9 +268,9 @@
   function go(route) {
     S.route = route; S.view = null; S.edit = null;
     try { history.replaceState(null, '', '#' + route); } catch (e) { }
-    render(); window.scrollTo(0, 0);
+    render(true); window.scrollTo(0, 0);
   }
-  function open(kind, id) { S.view = { kind: kind, id: id }; render(); window.scrollTo(0, 0); }
+  function open(kind, id) { S.view = { kind: kind, id: id }; render(true); window.scrollTo(0, 0); }
 
   /* ---------- banner, toast, sheet ---------- */
   function banner(html, rememberAs) {
@@ -187,7 +284,7 @@
   var toastT = null;
   function toast(msg) {
     var t = $('toast');
-    t.textContent = msg; t.hidden = false;
+    t.innerHTML = V.icon('check') + '<span></span>'; t.lastChild.textContent = msg; t.hidden = false;
     clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 2200);
   }
   function sheet(title, body) {
@@ -416,6 +513,10 @@
       applyImport(plan);
       toast('Restored ' + L.plural(plan.players.length, 'player') + ' and ' + L.plural(plan.games.length, 'game'));
     },
+    theme: function (el) {
+      var v = el.dataset.v === 'light' ? 'light' : 'dark';
+      store_set('dt.theme', v); applyTheme(v); render();
+    },
     'banner-x': function (el) { if (el.dataset.remember) store_set(el.dataset.remember, '1'); banner(''); },
     'switch-group': function () {
       sheet('Groups', '<div class="card list">' + S.groups.map(function (g) {
@@ -485,6 +586,7 @@
     /* live logging */
     tap: function (el) {
       var g = liveGame(); if (!g) return;
+      buzz();
       L.record(g, [[el.dataset.p, el.dataset.k, 1]], false);
       saveGame(g);
       var b = document.querySelector('.tap[data-p="' + (window.CSS && CSS.escape ? CSS.escape(el.dataset.p) : el.dataset.p) + '"][data-k="' + el.dataset.k + '"]');
@@ -492,6 +594,7 @@
     },
     'throw': function (el) {
       var g = liveGame(); if (!g) return;
+      buzz();
       var items = JSON.parse(el.dataset.items).map(function (i) { return [i[0], i[1], 1]; });
       L.record(g, items, true);
       saveGame(g);
@@ -773,6 +876,7 @@
     S.pendingJoin = sess_get('plunk.join') || '';
     S.authMode = 'in';
     registerOffline();
+    applyTheme(store_get('dt.theme') === 'light' ? 'light' : 'dark');
     render();
     var slow = setTimeout(function () {
       if (!S.ready) { var l = $('loading'); if (l) l.innerHTML = '<b>Still connecting…</b><span>The shared database isn’t answering yet. Check your connection — this page keeps trying.</span>'; }
@@ -781,9 +885,10 @@
       if (r.why === 'cloud-failed') { clearTimeout(slow); S.fatal = (r.error && r.error.message) || 'Something went wrong.'; render(); return; }
       store = r.store; S.storeKind = store.kind;
       if (store.onPending) store.onPending(function (n, off) {
-        var was = S.offline + '|' + (S.offline ? S.unsynced : 0);
+        var wasOffline = S.offline, was = S.offline + '|' + (S.offline ? S.unsynced : 0);
         S.offline = !!off; S.unsynced = store.outboxCount ? store.outboxCount() : 0; savingText();
         if (was !== S.offline + '|' + (S.offline ? S.unsynced : 0)) $('top').innerHTML = V.top(S);
+        if (wasOffline && !S.offline && !S.unsynced) toast('All changes saved');
       });
       if (store.onStale) store.onStale(function (table, id, gid) {
         if (gid !== S.gid) return;
@@ -812,6 +917,6 @@
       });
     });
   }
-  P.app = { S: S, A: A, FORMS: FORMS, render: render, boot: boot, game: game, backupData: backupData, planImport: planImport, applyImport: applyImport };
+  P.app = { S: S, A: A, FORMS: FORMS, render: render, runTicks: runTicks, ticks: ticks, boot: boot, game: game, backupData: backupData, planImport: planImport, applyImport: applyImport };
   if (!window.PLUNK_NO_BOOT) boot();
 })(window.PLUNK);

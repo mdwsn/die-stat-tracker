@@ -100,6 +100,17 @@
   /* Throw order for throw-by-throw mode: teams alternate, partners alternate. */
   function throwOrder(g) { return [g.teams[0][0], g.teams[1][0], g.teams[0][1], g.teams[1][1]]; }
   function thrower(g) { return throwOrder(g)[(g.turn || 0) % 4]; }
+  /* "All four" mode has no turn pointer, so who's up is read off the throws:
+     the earliest in the usual order among whoever has thrown least. */
+  function nextUp(g) {
+    if (g.mode === 'throw') return thrower(g);
+    var best = null, min = Infinity;
+    throwOrder(g).forEach(function (pid) { var t = throwsOf(g.stats[pid]); if (t < min) { min = t; best = pid; } });
+    return best;
+  }
+  /* Score a live game here only if you started it, or chose "Help score".
+     Everyone else watches, so two phones never fight over one game. */
+  function canScore(g, me, canWrite, helping) { return !!canWrite && (!g.by || g.by === me || !!(helping && helping[g.id])); }
   function teamOf(g, pid) {
     if ((g.appeared[0] || []).indexOf(pid) >= 0) return 0;
     if ((g.appeared[1] || []).indexOf(pid) >= 0) return 1;
@@ -401,7 +412,7 @@
     uid: uid, esc: esc, pct: pct, fmtPct: fmtPct, fmt1: fmt1, plural: plural, joinNames: joinNames,
     blankStats: blankStats, throwsOf: throwsOf, hitsOf: hitsOf, fairOf: fairOf, pointsOf: pointsOf,
     newGame: newGame, wasPledgeAt: wasPledgeAt, teamScore: teamScore, winnerOf: winnerOf, winState: winState,
-    throwOrder: throwOrder, thrower: thrower, teamOf: teamOf,
+    throwOrder: throwOrder, thrower: thrower, nextUp: nextUp, canScore: canScore, teamOf: teamOf,
     record: record, undo: undo, substitute: substitute, replacePlayer: replacePlayer, throwGaps: throwGaps,
     summarize: summarize, seasonStart: seasonStart, seasonLabel: seasonLabel, inPeriod: inPeriod,
     leaderboard: leaderboard, awards: awards, duos: duos,
