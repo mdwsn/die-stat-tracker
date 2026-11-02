@@ -57,7 +57,7 @@ PLUNK.APP_NAME = 'Dice Tracker';
    who can read or write anything. Leave them empty and the app saves to
    this browser only. */
 PLUNK.BACKEND = {
-  url: '',        // e.g. 'https://abcdefghijklm.supabase.co'
-  key: '',        // the publishable ("anon") key
+  url: 'https://yodibwocxusukufwdjip.supabase.co',
+  key: 'sb_publishable_GviVTDDQ7_o45lqwNsaGTA_MxlqBBSN',
   google: false   // true once Google sign-in is switched on (SETUP.md, step 5)
 };
