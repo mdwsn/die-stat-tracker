@@ -24,6 +24,7 @@
     shuffle: '<path d="m18 4 3 3-3 3"/><path d="m18 14 3 3-3 3"/><path d="M3 7h3.5a4 4 0 0 1 3.3 1.8l4.4 6.4a4 4 0 0 0 3.3 1.8H21"/><path d="M3 17h3.5a4 4 0 0 0 3.3-1.8l.7-1M13.5 9.8l.7-1A4 4 0 0 1 17.5 7H21"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
+    tv: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 3.9M16 6h2.5a2.5 2.5 0 0 1-2.6 3.9"/><path d="M12 13v3M9 20h6M10 16h4l.5 4h-5z"/>',
     shield: '<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/>',
     crosshair: '<circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
@@ -198,14 +199,74 @@
   V.gameCard = gameCard;
 
   /* ---------- LIVE GAME ---------- */
-  V.live = function (S, g) {
+  function scoreBar(S, g) {
     var ws = L.winState(g);
     var flag = ws.done ? '<span class="gp-flag done">Game</span>' : ws.point !== null ? '<span class="gp-flag">Game point</span>' : '<span class="lab">To ' + g.rules.target + '</span>';
-    var sb = '<div class="scorebar">' +
+    return '<div class="scorebar">' +
       '<div class="t"><span class="lab">' + dot(0) + 'Team 1</span><span class="names">' + teamNames(S, g, 0) + '</span><span class="sc">' + ws.a + '</span></div>' +
       '<div class="mid">' + flag + '<span class="saving" id="saving"></span></div>' +
       '<div class="t right"><span class="lab">Team 2' + dot(1) + '</span><span class="names">' + teamNames(S, g, 1) + '</span><span class="sc">' + ws.b + '</span></div>' +
       '</div>';
+  }
+  function ago(ts) {
+    var s = Math.max(0, Math.round((Date.now() - (ts || 0)) / 1000));
+    if (s < 10) return 'just now';
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    return when(ts);
+  }
+  V.ago = ago;
+  /* "Jake Miller: Point · Matt Price: Drop" — the last tap, in words */
+  function lastPlay(S, g) {
+    var e = g.log && g.log[g.log.length - 1];
+    if (!e) return '';
+    var O = {}; P.OUTCOMES.concat(P.DEFENSE).forEach(function (x) { O[x.k] = x; });
+    return e.it.map(function (it) { return esc(nameOf(S, it[0])) + ': ' + esc((O[it[1]] || { tap: it[1] }).tap); }).join(' · ');
+  }
+  /* On every screen while a game is going: tap it to watch. */
+  V.liveBar = function (S) {
+    var live = S.games.filter(function (g) { return g.status === 'live'; });
+    if (!live.length) return '';
+    var g = live[0];
+    return '<button class="live-bar" data-act="open-game" data-id="' + esc(g.id) + '"><span class="chip live">Live</span>' +
+      '<span class="lb-teams">' + teamNames(S, g, 0) + ' <b class="num">' + L.teamScore(g, 0) + '–' + L.teamScore(g, 1) + '</b> ' + teamNames(S, g, 1) + '</span>' +
+      (live.length > 1 ? '<span class="meta">+' + (live.length - 1) + ' more</span>' : '') +
+      '<span class="lb-go">Watch' + icon('chevron') + '</span></button>';
+  };
+  /* Someone else is scoring: the same game, live, with no buttons that could fight theirs. */
+  V.watch = function (S, g) {
+    var lp = lastPlay(S, g);
+    return '<div class="stack">' +
+      '<div class="row between">' + backBtn() + '<div class="row"><span class="chip live">Watching live</span>' +
+      '<button class="btn sm ghost" data-act="tv" data-id="' + esc(g.id) + '">' + icon('tv') + 'TV mode</button>' +
+      (S.canWrite ? '<button class="btn sm ghost" data-act="help-score" data-id="' + esc(g.id) + '">' + icon('edit') + 'Help score</button>' : '') + '</div></div>' +
+      scoreBar(S, g) +
+      '<p class="note">' + (lp ? 'Last play: ' + lp + ' · <span data-ago="' + (g.updated || 0) + '">' + ago(g.updated) + '</span>' : 'Waiting for the first throw.') +
+      (g.scorer && S.byId[g.scorer] ? ' · stats by ' + esc(nameOf(S, g.scorer)) : '') + '</p>' +
+      '<section class="section"><div class="section-h"><h2>Box score</h2><span class="lab">Updates as it happens</span></div>' + boxScore(S, g) + '</section>' +
+      gapsLine(S, g) + '</div>';
+  };
+  /* TV mode: the scoreboard, as big as the screen. For a laptop or TV at the party. */
+  V.tv = function (S, g) {
+    var ws = L.winState(g), lp = lastPlay(S, g);
+    var status = g.status === 'final' ? 'Final' : ws.done ? 'Game' : ws.point !== null ? 'Game point' : 'First to ' + g.rules.target;
+    function side(ti, score) {
+      return '<div class="tv-side"><div class="tv-team">' + dot(ti) + '<span>' + teamNames(S, g, ti) + '</span></div>' +
+        '<div class="tv-score">' + score + '</div><div class="tv-players">' + g.teams[ti].map(function (pid) {
+          var st = g.stats[pid] || {};
+          return '<span>' + esc(nameOf(S, pid)) + ' · <b>' + L.pointsOf(st, g.rules) + '</b> pts · ' + L.throwsOf(st) + ' throws</span>';
+        }).join('') + '</div></div>';
+    }
+    return '<section class="tv" aria-label="Live scoreboard">' +
+      '<div class="tv-top">' + (g.status === 'live' ? '<span class="chip live">Live</span>' : '<span class="chip">Final</span>') +
+      '<span class="tv-status' + (ws.point !== null || ws.done ? ' hot' : '') + '">' + status + '</span>' +
+      '<button class="btn sm ghost" data-act="tv-exit">' + icon('x') + 'Exit</button></div>' +
+      '<div class="tv-board">' + side(0, ws.a) + '<div class="tv-vs">vs</div>' + side(1, ws.b) + '</div>' +
+      '<div class="tv-foot">' + (lp ? 'Last play: ' + lp : 'Waiting for the first throw') + '</div></section>';
+  };
+  V.live = function (S, g) {
+    var ws = L.winState(g);
+    var sb = scoreBar(S, g);
     var tools = '<div class="toolbar">' + seg('live-mode', g.mode, [['table', 'All four'], ['throw', 'Throw by throw']], 'Logging style') +
       '<button class="btn sm ghost" data-act="toggle-def" aria-pressed="' + !!g.defense + '">' + (g.defense ? 'Hide defense' : 'Track defense') + '</button>' +
       '<span class="sp"></span>' +

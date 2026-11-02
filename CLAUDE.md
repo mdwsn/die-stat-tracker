@@ -41,6 +41,12 @@ fixable. The README covers the user-facing feature list.
   that was offline for hours would flush its outbox on reconnect and clobber newer taps from another phone.
   Players now carry `updated` too. A rejected save fires `onStale`, and the app shows a banner and refetches.
   Only one phone should keep score per game; whole-game last-writer-wins can still drop one phone's taps.
+- **Live, watch, TV (2026-11-01).** A live game opens for **scoring** only on the device/account that
+  started it (`g.by === S.me`) or after **Help score** (`S.helping`, per session). Everyone else gets **watch**
+  (`V.watch`: live scorebar, last play, box score, no tap buttons). This prevents the two-scorer collision
+  that whole-game last-writer-wins can't merge. **TV mode** (`V.tv`) is a full-screen scoreboard. Every
+  screen except live/watch/TV/edit shows `V.liveBar`. `[data-ago]` text is refreshed every 5 s without a
+  re-render. `ROADMAP.md` holds the product plan; keep it current when priorities change.
 - **Opens offline (PWA).** `sw.js` serves the app's own files network-first (3 s timeout, then the saved
   copy) and the CDN/fonts cache-first. It never touches `*.supabase.co`. `manifest.webmanifest` plus
   `icons/` (drawn by `tools/make-icons.py`, standard library only) allow home-screen install. **Every file in
@@ -70,7 +76,7 @@ fixable. The README covers the user-facing feature list.
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 115 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 123 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.

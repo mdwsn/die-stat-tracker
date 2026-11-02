@@ -17,7 +17,7 @@
   var S = P.S = {
     ready: false, route: 'play', view: null, groups: [], gid: null, group: null,
     players: [], games: [], byId: {}, rules: clone(P.DEFAULT_RULES), local: {},
-    draft: null, edit: null, pick: null,
+    draft: null, edit: null, pick: null, helping: {},
     ui: { period: 'season', who: 'all', sort: 'impact', dir: -1, playerQ: '' },
     canWrite: true, me: null, claimed: false, storeKind: 'device',
     boardRows: [], awards: [], allRows: {}
@@ -81,6 +81,9 @@
     out.sort(function (a, b) { return (b.started || 0) - (a.started || 0); });
     return out;
   }
+  /* Score a live game here only if you started it (or chose "Help score").
+     Everyone else watches, so two phones never fight over one game. */
+  function scoringHere(g) { return S.canWrite && (!g.by || g.by === S.me || !!S.helping[g.id]); }
   function game(id) { return S.games.filter(function (g) { return g.id === id; })[0] || null; }
   function nameOf(pid) { var p = S.byId[pid]; return p ? (p.nick || p.name) : 'Unknown'; }
 
@@ -147,10 +150,13 @@
     else if (!S.ready) html = '<div class="empty" id="loading"><b>Loading…</b><span>Getting your groups.</span></div>';
     else if (!S.group) html = V.welcome(S);
     else if (S.view && S.view.kind === 'edit' && S.edit) html = V.editGame(S, S.edit);
-    else if (S.view && S.view.kind === 'live' && game(S.view.id) && game(S.view.id).status === 'live' && S.canWrite) html = V.live(S, game(S.view.id));
-    else if (S.view && (S.view.kind === 'game' || S.view.kind === 'live') && game(S.view.id)) html = V.game(S, game(S.view.id));
+    else if (S.view && S.view.kind === 'tv' && game(S.view.id)) html = V.tv(S, game(S.view.id));
+    else if (S.view && (S.view.kind === 'live' || S.view.kind === 'watch') && game(S.view.id) && game(S.view.id).status === 'live')
+      html = S.view.kind === 'live' && scoringHere(game(S.view.id)) ? V.live(S, game(S.view.id)) : V.watch(S, game(S.view.id));
+    else if (S.view && /^(game|live|watch)$/.test(S.view.kind) && game(S.view.id)) html = V.game(S, game(S.view.id));
     else if (S.view && S.view.kind === 'player' && S.byId[S.view.id]) html = V.player(S, S.byId[S.view.id]);
     else { S.view = null; html = V[S.route] ? V[S.route](S) : V.play(S); }
+    if (S.group && S.ready && !S.needAuth && !(S.view && /^(live|watch|tv|edit)$/.test(S.view.kind))) html = V.liveBar(S) + html;
     $('view').innerHTML = html;
     if (focusId && $(focusId)) {
       var el = $(focusId); el.focus();
@@ -462,8 +468,17 @@
     },
     'open-game': function (el) {
       var g = game(el.dataset.id);
-      open(g && g.status === 'live' && S.canWrite ? 'live' : 'game', el.dataset.id);
-      if (g && g.status === 'live') keepAwake(true);
+      if (g && g.status === 'live') { open(scoringHere(g) ? 'live' : 'watch', g.id); keepAwake(true); return; }
+      open('game', el.dataset.id);
+    },
+    'help-score': function (el) { S.helping[el.dataset.id] = true; open('live', el.dataset.id); },
+    tv: function (el) {
+      S.tvBack = S.view; open('tv', el.dataset.id); keepAwake(true);
+      try { var d = document.documentElement; if (d.requestFullscreen) d.requestFullscreen()['catch'](function () { }); } catch (e) { }
+    },
+    'tv-exit': function () {
+      try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen()['catch'](function () { }); } catch (e) { }
+      S.view = S.tvBack && S.tvBack.kind !== 'tv' ? S.tvBack : null; S.tvBack = null; render();
     },
     'open-player': function (el) { open('player', el.dataset.id); },
 
@@ -678,7 +693,16 @@
   });
   document.addEventListener('change', function (ev) { var el = ev.target.closest('[data-change]'); if (el && CHANGES[el.dataset.change]) CHANGES[el.dataset.change](el); });
   document.addEventListener('input', function (ev) { var el = ev.target.closest('[data-input]'); if (el && INPUTS[el.dataset.input]) INPUTS[el.dataset.input](el); });
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (!$('sheet').hidden) closeSheet();
+    else if (S.view && S.view.kind === 'tv') A['tv-exit']();
+  });
+  /* keeps "updated 12s ago" honest without redrawing the screen */
+  setInterval(function () {
+    var els = document.querySelectorAll('[data-ago]');
+    for (var i = 0; i < els.length; i++) els[i].textContent = V.ago(+els[i].getAttribute('data-ago'));
+  }, 5000);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && S.view && S.view.kind === 'live') { wake = null; keepAwake(true); }
   });

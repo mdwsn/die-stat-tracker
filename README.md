@@ -24,6 +24,9 @@ fill in on their own.
 - **Built for bad signal.** The app opens with no signal at all. Taps made offline are kept on the phone
   and upload by themselves when the signal returns, and the top bar shows how many are waiting. If two
   phones edited the same game, the newer save wins; an old offline copy never overwrites newer taps.
+- **Live across devices.** While a game is going, every screen shows a Live bar. Anyone in the group can
+  watch it update tap by tap, put it on a TV in **TV mode**, or press **Help score** to take over. Only the
+  person who started a game scores it by default, so two phones never fight over one game.
 - **Backups.** House → Backup downloads every player and game as one file. Restoring adds anything missing,
   matches players by name, and can be repeated safely.
 - **Installs like an app.** Add it to your phone's home screen and it opens full screen, with its own icon.
@@ -74,6 +77,7 @@ lose that column. Change its `label` instead.
 | `supabase/schema.sql` | The database: tables, and the rules for who can see and change what |
 | `tests/fake-supabase.js` | An in-memory stand-in for Supabase so the tests can run the website path |
 | `SETUP.md` | Step-by-step: putting the site online |
+| `ROADMAP.md` | The plan: foundations, one great house, many houses, a business |
 | `sw.js` | Lets the site open with no signal by keeping a copy of the app's files on the phone |
 | `manifest.webmanifest`, `icons/` | What a phone needs to install it on the home screen. `tools/make-icons.py` redraws the icons |
 

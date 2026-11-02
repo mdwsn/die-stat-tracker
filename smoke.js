@@ -160,6 +160,11 @@ ok($$('.tap[data-k="sht"]').length === 4 && /Fair hit/.test(view()) && /Short hi
 console.log('\n§4 Logging — table mode');
 const J = ids['Jake Miller'], R = ids['Ryan Cole'], M = ids['Matt Price'], C = ids['Chris Diaz'], SAM = ids['Sam Ortiz'];
 function tap(pid, k, n) { for (let i = 0; i < (n || 1); i++) click(`.tap[data-p="${pid}"][data-k="${k}"]`); }
+const liveId = S.view.id;
+click('[data-act="nav"][data-to="board"]');
+ok($('.live-bar') && /Live/.test($('.live-bar').textContent), 'while a game is going, other screens show a Live bar');
+click('.live-bar');
+ok(S.view.kind === 'live' && S.view.id === liveId && $('.seat'), 'tapping it returns to the game you’re scoring');
 tap(J, 'pt', 3); tap(J, 'tbl', 2); tap(J, 'mis', 1); tap(M, 'ctc', 1);
 ok(L.throwsOf(live().stats[J]) === 6, 'throws are counted automatically from outcomes (6)', live().stats[J]);
 ok(L.teamScore(live(), 0) === 3, 'score adds up from points (3)');
@@ -399,6 +404,16 @@ const LIVE2 = startGame(A1);
 A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
 await settle();
 ok(A2.S.games.some(g => g.id === LIVE2 && g.stats[JK].pt === 1), 'a tap on one phone shows up on the other, live');
+ok(A2.q('.live-bar') && /Watch/.test(A2.q('.live-bar').textContent), 'the other phone shows a Live bar to hop in');
+A2.click('.live-bar');
+ok(A2.S.view.kind === 'watch' && !A2.q('.tap') && /Watching live/.test(A2.view()), 'opening someone else’s live game watches it, with no scoring buttons to collide');
+A1.click(`.tap[data-p="${MP}"][data-k="sht"]`);
+await settle();
+ok(/Last play: Matt Price: Short hit/.test(A2.view()), 'the watch view updates live, last play included');
+A2.click('[data-act="tv"]');
+ok(A2.q('.tv') && A2.qa('.tv-score').map(x => x.textContent).join('-') === '1-0', 'TV mode shows the big scoreboard', A2.qa('.tv-score').map(x => x.textContent));
+A2.click('[data-act="tv-exit"]');
+ok(A2.S.view.kind === 'watch' && !A2.q('.tv'), 'and Exit goes back to watching');
 
 console.log('   — a stranger without the link');
 const A3 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));
@@ -433,6 +448,8 @@ await settle();
 srv.offline = false;
 A2.click('[data-act="nav"][data-to="games"]');
 A2.click(`[data-act="open-game"][data-id="${LIVE2}"]`);
+A2.click('[data-act="help-score"]');                       // phone 2 chooses to help score
+ok(A2.S.view.kind === 'live' && A2.q('.tap'), '“Help score” switches the watcher to scoring');
 A2.click(`.tap[data-p="${MP}"][data-k="plk"]`);            // phone 2, online, a moment later
 await settle();
 ok(srv.games[LIVE2].data.stats[MP].plk === 1, 'the online phone’s tap reaches the server');
