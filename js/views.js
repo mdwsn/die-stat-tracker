@@ -75,18 +75,39 @@
     var nav = TABS.map(function (t) {
       return '<button data-act="nav" data-to="' + t[0] + '"' + (S.route === t[0] ? ' aria-current="page"' : '') + '>' + icon(t[0]) + '<span>' + t[1] + '</span></button>';
     }).join('');
-    var shared = S.storeKind === 'shared';
+    var shared = S.storeKind === 'shared' || S.storeKind === 'cloud';
+    var status = S.storeKind === 'cloud' ? (S.offline ? 'Offline · changes will sync' : 'Synced · updates live') : shared ? 'Shared · updates live' : 'Saved in this browser';
     var onPlay = S.route === 'play' && !S.view;
     return '<button class="ws" data-act="switch-group" aria-label="Switch group"><span class="die" aria-hidden="true"></span><span class="ws-name">' + esc(g.name) + '</span>' + icon('updown') + '</button>' +
       (S.canWrite ? '<button class="btn wide side-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '') +
       '<nav class="side-nav" aria-label="Sections">' + nav + '</nav>' +
-      '<div class="side-foot' + (shared ? '' : ' device') + '"><span class="dot"></span>' + (shared ? 'Shared · updates live' : 'Saved in this browser') + '</div>' +
+      '<div class="side-foot' + (!shared ? ' device' : S.offline ? ' offline' : '') + '"><span class="dot"></span>' + status + '</div>' +
       (S.canWrite && !onPlay ? '<button class="btn sm top-new" data-act="nav" data-to="play">' + icon('plus') + 'New game</button>' : '');
   };
   V.tabs = function (S) {
     return TABS.map(function (t) {
       return '<button data-act="nav" data-to="' + t[0] + '"' + (S.route === t[0] ? ' aria-current="page"' : '') + '>' + icon(t[0]) + '<span>' + t[2] + '</span></button>';
     }).join('');
+  };
+
+  /* ---------- sign in (the website) ---------- */
+  V.signin = function (S) {
+    var up = S.authMode === 'up';
+    return '<section class="welcome"><div class="welcome-h"><span class="die lg" aria-hidden="true"></span>' +
+      '<h1>' + (up ? 'Create your account' : 'Sign in to Dice Tracker') + '</h1>' +
+      '<p class="sub">' + (up ? 'One account works for every group you join.' : 'Stats for every game your group plays.') + '</p></div>' +
+      (S.pendingJoin ? '<div class="notice">You’ve been invited to a group. ' + (up ? 'Create an account' : 'Sign in') + ' and you’ll join it straight away.</div>' : '') +
+      (S.authNote ? '<div class="notice">' + esc(S.authNote) + '</div>' : '') +
+      '<form class="card pad stack" data-form="auth" novalidate>' +
+      (S.googleOn ? '<button type="button" class="btn ghost big wide" data-act="google">Continue with Google</button><div class="or"><span>or use email</span></div>' : '') +
+      '<div class="field"><label for="auth-email">Email</label><input class="input" id="auth-email" name="email" type="email" autocomplete="email" inputmode="email" required value="' + esc(S.authEmail || '') + '"></div>' +
+      '<div class="field"><label for="auth-pw">Password</label><input class="input" id="auth-pw" name="password" type="password" required minlength="6" autocomplete="' + (up ? 'new-password' : 'current-password') + '">' +
+      (up ? '<span class="hint">At least 6 characters.</span>' : '') + '</div>' +
+      (S.authError ? '<p class="form-error" role="alert">' + esc(S.authError) + '</p>' : '') +
+      '<button class="btn big wide" type="submit"' + (S.authBusy ? ' disabled' : '') + '>' + (S.authBusy ? 'One moment…' : up ? 'Create account' : 'Sign in') + '</button>' +
+      '</form>' +
+      '<p class="note center">' + (up ? 'Already have an account? <button class="link" data-act="auth-mode" data-v="in">Sign in</button>'
+        : 'New here? <button class="link" data-act="auth-mode" data-v="up">Create an account</button>') + '</p></section>';
   };
 
   /* ---------- first run: no group yet ---------- */
@@ -100,9 +121,14 @@
       '<div class="field"><label for="g-name">Group name</label><input class="input" id="g-name" name="name" required maxlength="60" placeholder="e.g. Alpha Delta house"></div>' +
       '<div class="field"><label for="g-kind">Type</label><select class="input" id="g-kind" name="kind"><option value="house">Fraternity / house</option><option value="friends">Friend group</option><option value="league">League / club</option></select></div>' +
       '<button class="btn big wide" type="submit">Create group</button></form>';
+    var cloud = S.storeKind === 'cloud';
+    var join = cloud ? '<form class="card pad stack" data-form="join"><div class="hgroup"><h2>Join a group</h2><p class="sub">Got an invite link? Just open it. Or type the code from it here.</p></div>' +
+      '<div class="field"><label for="join-code">Invite code</label><input class="input" id="join-code" name="code" required maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. 7F3A9C2B"></div>' +
+      '<div><button class="btn ghost" type="submit">Join group</button></div></form>' : '';
+    var acct = cloud && S.email ? '<p class="note center">Signed in as <b>' + esc(S.email) + '</b> · <button class="link" data-act="sign-out">Sign out</button></p>' : '';
     return '<section class="welcome"><div class="welcome-h"><span class="die lg" aria-hidden="true"></span><h1>Die stats, kept properly</h1>' +
       '<p class="sub">Register players once, log games from any phone, and the leaderboard, awards and game recaps fill in on their own.</p></div>' +
-      others + form + '</section>';
+      others + join + form + acct + '</section>';
   };
 
   /* ---------- PLAY: live games, new game, recent ---------- */
@@ -488,9 +514,17 @@
       (S.canWrite ? '<div><button class="btn" type="submit">Save rules</button></div>' : '') + '</form>' +
       '<div class="stack">' +
       '<section class="card pad stack"><div class="hgroup"><h2>Pledge class</h2></div>' + pledgeBody + '</section>' +
-      '<section class="card pad stack"><div class="hgroup"><h2>Who can log games</h2><p class="sub">' +
-      (S.storeKind === 'shared' ? 'Anyone with access can watch. People invited as editors can log and edit games.' : 'This copy saves games in this browser only, so other phones won’t see them.') +
-      '</p></div><div><button class="btn ghost" data-act="switch-group">Switch or create group</button></div></section>' +
+      (S.storeKind === 'cloud'
+        ? '<section class="card pad stack"><div class="hgroup"><h2>Invite people</h2><p class="sub">Send this link in the group chat. Anyone who opens it and signs in joins ' + esc(g.name) + ' and can log games.</p></div>' +
+          (S.inviteLink ? '<div class="invite"><span id="invite-link">' + esc(S.inviteLink) + '</span></div>' +
+            '<div class="row"><button class="btn" data-act="copy-invite">Copy invite link</button>' + (S.canShare ? '<button class="btn ghost" data-act="share-invite">Share…</button>' : '') + '</div>' +
+            '<p class="legend">Invite code: <b class="code">' + esc(g.joinCode) + '</b></p>' : '<p class="note">The invite link appears once the group has synced.</p>') +
+          '</section>' +
+          '<section class="card pad stack"><div class="hgroup"><h2>Your account</h2><p class="sub">Signed in as ' + esc(S.email) + '</p></div>' +
+          '<div class="row"><button class="btn ghost" data-act="switch-group">Switch or create group</button><button class="btn ghost" data-act="sign-out">Sign out</button></div></section>'
+        : '<section class="card pad stack"><div class="hgroup"><h2>Who can log games</h2><p class="sub">' +
+          (S.storeKind === 'shared' ? 'Anyone with access can watch. People invited as editors can log and edit games.' : 'This copy saves games in this browser only, so other phones won’t see them.') +
+          '</p></div><div><button class="btn ghost" data-act="switch-group">Switch or create group</button></div></section>') +
       '</div></div>';
   };
 })(window.PLUNK);

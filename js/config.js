@@ -50,3 +50,14 @@ PLUNK.MIN_DUO_GAMES = 3;    // games together before a pair can be Best Duo
 PLUNK.EVEN_TOLERANCE = 1;   // live game flags anyone this many throws behind
 
 PLUNK.APP_NAME = 'Dice Tracker';
+
+/* The real website's database (Supabase). Both values come from the
+   Supabase dashboard (SETUP.md, step 2). They are PUBLIC by design and
+   safe to commit: the database's own rules (supabase/schema.sql) decide
+   who can read or write anything. Leave them empty and the app saves to
+   this browser only. */
+PLUNK.BACKEND = {
+  url: '',        // e.g. 'https://abcdefghijklm.supabase.co'
+  key: '',        // the publishable ("anon") key
+  google: false   // true once Google sign-in is switched on (SETUP.md, step 5)
+};

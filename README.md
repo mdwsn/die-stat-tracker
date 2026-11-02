@@ -30,22 +30,15 @@ fill in on their own.
 
 | How you open it | Where games are saved |
 |---|---|
-| Published on claude.ai (`artifact.html`) | A shared database. Everyone signed in with access sees the same games, live. |
-| Anywhere else (GitHub Pages, any web host, opening `index.html` directly) | **This browser only.** Other phones don't see the games. |
+| **The website**: `index.html` with the Supabase settings filled in (`js/config.js`) | **One shared database.** You sign in, join your group by invite link, and every phone sees the same games, live. Taps made with no signal are kept on the phone and save when the signal returns. |
+| `index.html` without those settings | This browser only. Other phones don't see the games. Fine for trying it out. |
+| Published on claude.ai (`artifact.html`) | claude.ai's shared database. This was the first version and is kept working, but the website is the real app. |
 
-Browser-only storage is fine for trying the app, but it shouldn't hold a season's only record. Safari
-clears a site's saved data after 7 days without a visit. A shared database for the public web version
-is the next step on the roadmap.
+## Put it online
 
-## Put it on GitHub Pages (free hosting)
-
-1. Upload the contents of this folder to a GitHub repository, with `index.html` at the top level.
-2. In the repository, open **Settings → Pages**.
-3. Under **Build and deployment**, set Source to **Deploy from a branch**, pick **main** and
-   **/ (root)**, then press **Save**.
-4. After about a minute the site is live at `https://<your-username>.github.io/<repository-name>/`.
-
-There's no build step. The files are served exactly as they are.
+[SETUP.md](SETUP.md) walks through it in about 20 minutes: GitHub Pages hosts the site for free, and
+Supabase (free tier) handles sign-in and the shared database. There's no build step; the files are served
+exactly as they are.
 
 ## Change what gets tracked
 
@@ -68,10 +61,13 @@ lose that column. Change its `label` instead.
 | `app.css` | All styling, light and dark |
 | `js/config.js` | What gets tracked |
 | `js/logic.js` | Scoring, leaderboard, awards, recaps, name search: pure maths, no screen |
-| `js/store.js` | Where data is saved: shared database or this browser |
+| `js/store.js` | Where data is saved: the website's database (Supabase), claude.ai's, or this browser |
 | `js/views.js` | Every screen |
 | `js/app.js` | Taps, forms, navigation, start-up |
 | `smoke.js` | Automated tests that drive the real app like a person would |
+| `supabase/schema.sql` | The database: tables, and the rules for who can see and change what |
+| `tests/fake-supabase.js` | An in-memory stand-in for Supabase so the tests can run the website path |
+| `SETUP.md` | Step-by-step: putting the site online |
 
 ## Tests
 
@@ -84,5 +80,5 @@ npm test
 
 ## Roadmap
 
-- Shared database and sign-in for the public web version, so every phone sees the same games.
+- "Continue with Google" sign-in and password-reset emails (see the end of SETUP.md).
 - Tournaments.

@@ -9,6 +9,8 @@
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function store_get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function store_set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+  function sess_get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+  function sess_set(k, v) { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch (e) { } }
   /* scorer: null = default to the player linked to this account, '' = nobody, else a player id */
   function blankDraft() { return { teams: [[null, null], [null, null]], mode: 'table', defense: S.rules ? S.rules.defense : true, scorer: null }; }
 
@@ -21,7 +23,7 @@
     boardRows: [], awards: [], allRows: {}
   };
   S.draft = blankDraft();
-  var store = null, unGroup = null;
+  var store = null, unGroup = null, unGroups = null;
 
   /* ---------- derived numbers, recomputed after every change ---------- */
   function derive() {
@@ -54,6 +56,8 @@
     S.claimed = !!S.me && S.players.some(function (p) { return p.userId === S.me; });
     var mine = S.me && S.players.filter(function (p) { return p.userId === S.me && !p.archived; })[0];
     S.claimedPid = mine ? mine.id : null;
+    S.inviteLink = S.group && S.group.joinCode && store && store.siteUrl ? store.siteUrl() + '?join=' + S.group.joinCode : '';
+    S.canShare = !!(navigator.share);
     if (S.players.length && S.draft.scorer && !(S.byId[S.draft.scorer] && !S.byId[S.draft.scorer].archived)) S.draft.scorer = null;
     if (S.players.length) S.draft.teams = S.draft.teams.map(function (t) {
       return t.map(function (pid) { return pid && S.byId[pid] && !S.byId[pid].archived ? pid : null; });
@@ -83,6 +87,8 @@
     if (e && e.code === 'invalid_argument') {
       S.canWrite = false;
       banner('This link is view-only for you. Ask the group owner to invite you as an editor to log games.');
+    } else if (e && e.code === 'denied') {
+      banner('You don’t have access to change this group. Ask a member to send you its invite link.');
     } else if (e && e.code === 'quota_exceeded') banner('The database is full: ' + esc(e.message));
     else banner('A change didn’t save (' + esc((e && e.code) || 'error') + '). It is still on this screen — try again in a moment.');
     render();
@@ -133,7 +139,9 @@
     $('tabs').hidden = !S.group;
     $('app').classList.toggle('solo', !S.group);
     var html;
-    if (!S.ready) html = '<div class="empty" id="loading"><b>Loading…</b><span>Getting your groups.</span></div>';
+    if (S.fatal) html = '<div class="empty"><b>Can’t start Dice Tracker</b><span>' + esc(S.fatal) + '</span><button class="btn" data-act="reload">Try again</button></div>';
+    else if (S.needAuth) html = V.signin(S);
+    else if (!S.ready) html = '<div class="empty" id="loading"><b>Loading…</b><span>Getting your groups.</span></div>';
     else if (!S.group) html = V.welcome(S);
     else if (S.view && S.view.kind === 'edit' && S.edit) html = V.editGame(S, S.edit);
     else if (S.view && S.view.kind === 'live' && game(S.view.id) && game(S.view.id).status === 'live' && S.canWrite) html = V.live(S, game(S.view.id));
@@ -145,8 +153,11 @@
       var el = $(focusId); el.focus();
       if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { }
     }
+    savingText();
+  }
+  function savingText() {
     var sv = $('saving');
-    if (sv) sv.textContent = store && store.pending() ? 'Saving…' : '';
+    if (sv) sv.textContent = S.offline ? 'Offline · will sync' : store && store.pending() ? 'Saving…' : '';
   }
   function go(route) {
     S.route = route; S.view = null; S.edit = null;
@@ -268,6 +279,22 @@
     nav: function (el) { go(el.dataset.to); },
     back: function () { S.view = null; S.edit = null; render(); },
     close: closeSheet,
+    reload: function () { location.reload(); },
+    'auth-mode': function (el) { S.authMode = el.dataset.v; S.authError = ''; S.authNote = ''; render(); },
+    google: function () { store.auth.google(); },
+    'sign-out': function () { closeSheet(); store.auth.signOut(); },
+    'copy-invite': function () {
+      function select() {
+        var el = $('invite-link'); if (!el) return;
+        var r = document.createRange(); r.selectNodeContents(el);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        toast('Link selected. Copy it from here.');
+      }
+      try { navigator.clipboard.writeText(S.inviteLink).then(function () { toast('Invite link copied'); }, select); } catch (e) { select(); }
+    },
+    'share-invite': function () {
+      try { navigator.share({ title: 'Join ' + S.group.name + ' on Dice Tracker', url: S.inviteLink })['catch'](function () { }); } catch (e) { }
+    },
     'banner-x': function (el) { if (el.dataset.remember) store_set(el.dataset.remember, '1'); banner(''); },
     'switch-group': function () {
       sheet('Groups', '<div class="card list">' + S.groups.map(function (g) {
@@ -430,11 +457,42 @@
     'create-group': function (f) {
       var name = String(fv(f, 'name')).trim(); if (!name) return;
       var g = { id: L.uid('h'), name: name, kind: fv(f, 'kind') || 'house', created: Date.now(), by: S.me, rules: clone(P.DEFAULT_RULES) };
+      if (store.createGroup) {
+        // on the website the server makes the group (and its invite code) before anything can be added to it
+        var btn = f.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+        store.createGroup(g).then(function (code) {
+          closeSheet();
+          g.joinCode = code;
+          if (!S.groups.some(function (x) { return x.id === g.id; })) S.groups = S.groups.concat([g]);
+          S.route = 'players'; selectGroup(g.id);
+          toast(name + ' created. Add your players.');
+        }, function (e) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Create group'; }
+          onWriteError(e);
+        });
+        return;
+      }
       closeSheet();
       S.groups = S.groups.filter(function (x) { return x.id !== g.id; }).concat([g]);
       store.saveGroup(g).then(null, onWriteError);
       S.route = 'players'; selectGroup(g.id);
       toast(name + ' created — add your players');
+    },
+    auth: function (f) {
+      var email = String(fv(f, 'email')).trim(), pw = String(fv(f, 'password'));
+      if (!email || !pw) return;
+      var up = S.authMode === 'up';
+      S.authBusy = true; S.authError = ''; S.authNote = ''; S.authEmail = email; render();
+      (up ? store.auth.signUp(email, pw) : store.auth.signIn(email, pw)).then(function (data) {
+        S.authBusy = false;
+        if (up && data && !data.session) { S.authMode = 'in'; S.authNote = 'Almost there: confirm your email with the link we just sent, then sign in.'; }
+        render();   // with a session, the sign-in listener takes it from here
+      }, function (e) { S.authBusy = false; S.authError = authMessage(e); render(); });
+    },
+    join: function (f) {
+      var code = String(fv(f, 'code')).trim().toUpperCase();
+      if (code) { sess_set('plunk.join', code); joinFromInvite(); }
     },
     rules: function (f) {
       var g = clone(S.group);
@@ -498,18 +556,90 @@
     if (document.visibilityState === 'visible' && S.view && S.view.kind === 'live') { wake = null; keepAwake(true); }
   });
 
+  /* ---------- sign-in (the website only) ---------- */
+  function authMessage(e) {
+    var m = String((e && e.message) || '');
+    if (/invalid login credentials/i.test(m)) return 'That email and password don’t match.';
+    if (/already (been )?registered|already exists/i.test(m)) return 'That email already has an account. Sign in instead.';
+    if (/at least 6|password should/i.test(m)) return 'Use a password with at least 6 characters.';
+    if (/not confirmed/i.test(m)) return 'Confirm your email first. The link is in your inbox.';
+    if (/rate limit|too many/i.test(m)) return 'Too many tries. Wait a minute, then try again.';
+    if (/failed to fetch|network|load failed/i.test(m)) return 'Can’t reach the server. Check your connection.';
+    return m || 'Something went wrong. Try again.';
+  }
+  /* An invite link is the site address + ?join=CODE. The code waits here
+     through sign-in (and a Google round trip) until there's an account to join with. */
+  function joinFromInvite() {
+    var code = sess_get('plunk.join');
+    if (!code || !store || !store.joinGroup || !S.me) return;
+    sess_set('plunk.join', ''); S.pendingJoin = '';
+    store.joinGroup(code).then(function (gid) {
+      var g = S.groups.filter(function (x) { return x.id === gid; })[0];
+      S.route = 'play';
+      selectGroup(gid);
+      toast('You’re in' + (g ? ': ' + g.name : ''));
+    }, function (e) {
+      banner(/invite code/i.test(e.message || '') ? 'That invite link doesn’t match any group. Ask for a fresh one.' : 'Couldn’t join the group (' + esc(e.code || 'error') + ').');
+      render();
+    });
+  }
+  function listenToGroups(slow) {
+    var firstCall = true;
+    unGroups = store.listenGroups(function (groups) {
+      clearTimeout(slow);
+      S.groups = groups.sort(function (a, b) { return (a.created || 0) - (b.created || 0); });
+      var first = !S.ready; S.ready = true;
+      if (first || !S.groups.some(function (g) { return g.id === S.gid; })) {
+        var want = store_get('plunk.gid');
+        var pick = S.groups.filter(function (g) { return g.id === want; })[0] || (S.groups.length === 1 ? S.groups[0] : null);
+        if (pick) selectGroup(pick.id); else { S.group = null; derive(); render(); }
+      } else { S.group = S.groups.filter(function (g) { return g.id === S.gid; })[0]; derive(); render(); }
+      if (firstCall) { firstCall = false; joinFromInvite(); }
+    }, function (e) { clearTimeout(slow); S.ready = true; banner('Can’t reach the database (' + esc(e.code) + ').'); render(); });
+  }
+  /* Runs at start-up and whenever someone signs in or out. */
+  function startCloud() {
+    if (unGroups) { unGroups(); unGroups = null; }
+    if (unGroup) { unGroup(); unGroup = null; }
+    S.groups = []; S.gid = null; S.group = null; S.players = []; S.games = []; S.local = {}; S.view = null; S.edit = null;
+    var u = store.auth.user;
+    S.me = u ? u.id : null; S.email = u ? (u.email || '') : '';
+    S.needAuth = !u; S.authBusy = false; S.canWrite = true;
+    if (!u) { S.authMode = 'in'; S.authError = ''; S.ready = true; render(); return; }   // signed out: back to plain "Sign in"
+    S.ready = false; render();
+    listenToGroups(null);
+  }
+
   /* ---------- boot ---------- */
   function boot() {
     var h = (location.hash || '').replace('#', '');
     if (['play', 'board', 'games', 'players', 'group'].indexOf(h) >= 0) S.route = h;
+    var inv = /[?&]join=([A-Za-z0-9]+)/.exec(location.search);
+    if (inv) {
+      sess_set('plunk.join', inv[1].toUpperCase());
+      try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { }
+    }
+    S.pendingJoin = sess_get('plunk.join') || '';
+    S.authMode = 'in';
     render();
     var slow = setTimeout(function () {
       if (!S.ready) { var l = $('loading'); if (l) l.innerHTML = '<b>Still connecting…</b><span>The shared database isn’t answering yet. Check your connection — this page keeps trying.</span>'; }
     }, 10000);
     P.openStore().then(function (r) {
+      if (r.why === 'cloud-failed') { clearTimeout(slow); S.fatal = (r.error && r.error.message) || 'Something went wrong.'; render(); return; }
       store = r.store; S.storeKind = store.kind;
-      if (store.onPending) store.onPending(function (n) { var sv = $('saving'); if (sv) sv.textContent = n ? 'Saving…' : ''; });
+      if (store.onPending) store.onPending(function (n, off) {
+        var was = S.offline; S.offline = !!off; savingText();
+        if (was !== S.offline) $('top').innerHTML = V.top(S);
+      });
       if (store.onWriteError) store.onWriteError(function () { });
+      if (store.kind === 'cloud') {
+        clearTimeout(slow);
+        S.googleOn = !!(P.BACKEND && P.BACKEND.google);
+        store.auth.onChange(function () { startCloud(); });
+        startCloud();
+        return;
+      }
       if (r.why === 'device') banner('This copy saves games in this browser only, so other phones won’t see them. ' +
         'Safari can also clear a site’s saved data after 7 days without a visit, so don’t keep the season’s only record here.', 'plunk.note.device');
       if (r.why === 'no-db') banner('You’re not signed in to claude.ai, so your group’s shared stats can’t load here. Sign in and reopen this link. Anything logged now stays on this device only.');
@@ -517,17 +647,7 @@
       return who.then(function (w) {
         if (w[0]) S.me = w[0].id || null;
         if (w[1] === false && store.kind === 'shared') S.canWrite = false;
-        store.listenGroups(function (groups) {
-          clearTimeout(slow);
-          S.groups = groups.sort(function (a, b) { return (a.created || 0) - (b.created || 0); });
-          var first = !S.ready; S.ready = true;
-          if (first || !S.groups.some(function (g) { return g.id === S.gid; })) {
-            var want = store_get('plunk.gid');
-            var pick = S.groups.filter(function (g) { return g.id === want; })[0] || (S.groups.length === 1 ? S.groups[0] : null);
-            if (pick) return selectGroup(pick.id);
-          } else S.group = S.groups.filter(function (g) { return g.id === S.gid; })[0];
-          derive(); render();
-        }, function (e) { clearTimeout(slow); S.ready = true; banner('Can’t reach the database (' + esc(e.code) + ').'); render(); });
+        listenToGroups(slow);
       });
     });
   }

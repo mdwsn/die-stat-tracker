@@ -21,19 +21,38 @@ tap by tap, and finishes it. Finished games feed the leaderboard, the awards and
 Any game can be edited later, because a finished game that someone says "didn't count" has to be
 fixable. The README covers the user-facing feature list.
 
-## Two page files, one app
-- `index.html` is a complete page for GitHub Pages or any static host. It runs in **device-only**
-  mode there (localStorage) and shows a dismissable note saying so.
+## How it runs: the website is the product
+- **The website** = `index.html` on GitHub Pages, with `PLUNK.BACKEND` (url + publishable key) filled in
+  `js/config.js`, which runs `CloudStore` on **Supabase**. It's the real app; the maintainer called the
+  claude.ai version a "gimmick". Setup steps live in `SETUP.md` (only he can create the accounts). Schema and
+  security are in `supabase/schema.sql`: row-level security means you only see groups you're a member of, and
+  membership comes only through `create_group()` / `join_group(code)`. **The publishable key is public by
+  design. Never put the `service_role`/secret key in the repo.**
+- Sign-in is email + password with **"Confirm email" OFF**, because Supabase's default email only reaches
+  project-team addresses. Google sign-in is optional (`BACKEND.google`). Invite link = site URL +
+  `?join=CODE`, and the code survives sign-in (and a Google round trip) in sessionStorage.
+- **Offline-safe by design (basement wifi):** every write is parked in `plunk.outbox.v1` the moment it's
+  made and only cleared once the server confirms it. Network failures retry with backoff (2s/5s/10s/20s)
+  and on the `online` event. Groups are cached (`plunk.cache.*`) so a reload with no signal still shows the
+  last data plus the parked taps. Realtime catches up (refetch) on reconnect and when the tab wakes.
+  Realtime can't filter DELETE events, so one unfiltered delete listener ignores ids it doesn't hold.
+- With `BACKEND` empty, `index.html` falls back to **device-only** (localStorage) and shows a dismissable
+  note saying so.
 - `artifact.html` is a bare shell for claude.ai, which wraps it in its own page skeleton. **Never add
   doctype/html/head/body to it.** Publish it with the Artifact tool, passing
   `url: https://claude.ai/artifact/6XjXsZBPBCcoguetrH44VL` (the live shared version). It declares the
   `db` + `user` capabilities, so it runs on the shared database.
 - smoke.js §0 fails if the two stop loading the same scripts or containers. A new script goes in both.
+  (The Supabase library is lazy-loaded by `store.js` from a pinned jsDelivr URL, which is why it isn't a
+  `<script>` tag in either page.)
+- smoke.js §18 runs the website path against `tests/fake-supabase.js`, an in-memory stand-in that copies the
+  membership rules. **It is not the real database.** Once `BACKEND` is set, also check the real project:
+  an unauthenticated REST read of `groups` must return `[]`.
 
 ## Files
 `app.css` (tokens at top, light + dark) · `js/config.js` (**what gets tracked**) · `js/logic.js` (pure
 maths) · `js/store.js` (two backends with identical methods) · `js/views.js` (screens; views only
-read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 77 checks).
+read) · `js/app.js` (state, `data-act` taps, forms, sheets, boot) · `smoke.js` (`npm test`, 98 checks).
 Node may be at `~/.local/node/bin` rather than on PATH. jsdom isn't installed in this folder (no
 `node_modules/`). Either run `npm install` once, or borrow the copy Command Center already has:
 `NODE_PATH=~/Downloads/Movetoclaudecode/node_modules node smoke.js`.

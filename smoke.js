@@ -15,6 +15,36 @@ const inline = src => src
   .replace(/<script src="([^"]+)"><\/script>/g, (_, f) => '<script>' + read(f) + '</script>');
 const html = inline(read('index.html'));            // a complete page, exactly what GitHub Pages serves
 
+// the website build: same page, with the database switched on (pointed at tests/fake-supabase.js)
+const fake = require('./tests/fake-supabase.js');
+const cloudHtml = inline(read('index.html').replace('<script src="js/config.js"></script>',
+  '<script src="js/config.js"></script><script>PLUNK.BACKEND = { url: "https://fake.supabase.co", key: "test-key", google: true };</script>'));
+const settle = async (n) => { for (let i = 0; i < (n || 12); i++) await new Promise(r => setTimeout(r, 5)); };
+function bootCloud(srv, url) {
+  const dom = new JSDOM(cloudHtml, { runScripts: 'dangerously', url, beforeParse(w) { w.supabase = fake.lib(srv); w.scrollTo = () => {}; } });
+  return settle().then(() => dom.window);
+}
+function ui(win) {
+  const doc = win.document, q = (s) => doc.querySelector(s), qa = (s) => [...doc.querySelectorAll(s)];
+  const u = {
+    win, q, qa, S: win.PLUNK.app.S,
+    view: () => doc.getElementById('view').textContent,
+    click(sel) { const el = typeof sel === 'string' ? q(sel) : sel; if (!el) throw new Error('nothing to click: ' + sel); el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true })); },
+    submit(sel, values) {
+      const f = q(sel); if (!f) throw new Error('no form: ' + sel);
+      for (const [k, v] of Object.entries(values || {})) { const el = f.elements.namedItem(k); if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }
+      f.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+    },
+    type(sel, text) { const el = q(sel); el.value = text; el.dispatchEvent(new win.Event('input', { bubbles: true })); },
+    pick(sel, query, name) {
+      u.click(sel); u.type('#pick-q', query);
+      const b = qa('#pick-results [data-act="pick"]').find((x) => x.textContent.includes(name));
+      if (!b) throw new Error('no search result for ' + name); u.click(b);
+    }
+  };
+  return u;
+}
+
 let pass = 0, fail = 0;
 function ok(cond, name, extra) {
   if (cond) { pass++; console.log('  ✓ ' + name); }
@@ -289,6 +319,87 @@ ok(L.teamScore(zero, 0) === 0, 'a sink set to be worth 0 really scores 0');
 const kg = L.newGame({ teams: [[J, R], [M, C]], scorer: J, scorerPledge: false });
 kg.status = 'final';
 ok(!L.awards(L.leaderboard([kg], S.players, 'all'), [kg], 'all').some(a => a.key === 'stat'), 'tracking as a member doesn’t count toward the pledge award');
+
+console.log('\n§18 The real website (sign-in + shared database), against a stand-in server');
+const srv = fake.server();
+const A1 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));
+ok(/Sign in to Dice Tracker/.test(A1.view()), 'the website asks you to sign in first');
+ok(/Continue with Google/.test(A1.view()), 'Google sign-in shows once it’s switched on');
+A1.submit('form[data-form="auth"]', { email: 'nobody@example.com', password: 'wrong-pass' });
+await settle();
+ok(/don’t match/.test(A1.view()), 'a wrong password gets a plain-English error');
+A1.click('[data-act="auth-mode"][data-v="up"]');
+A1.submit('form[data-form="auth"]', { email: 'michael@example.com', password: 'secret1' });
+await settle();
+ok(!A1.S.needAuth && /Start a group/.test(A1.view()) && /Join a group/.test(A1.view()), 'creating an account lands on start-or-join');
+A1.submit('form[data-form="create-group"]', { name: 'Psi Upsilon Omega', kind: 'house' });
+await settle();
+const GID = A1.S.gid;
+ok(GID && srv.groups[GID] && srv.members.some(m => m.group_id === GID && m.role === 'owner'), 'the server creates the group and makes its creator the owner');
+for (const n of ['Jake Miller', 'Ryan Cole', 'Matt Price', 'Chris Diaz']) { A1.click('[data-act="add-player"]'); A1.submit('form[data-form="player"]', { name: n }); }
+await settle();
+ok(Object.values(srv.players).filter(p => p.group_id === GID).length === 4, 'players are saved to the server');
+A1.click('[data-act="nav"][data-to="group"]');
+const CODE = srv.groups[GID].join_code;
+ok(A1.q('#invite-link') && A1.q('#invite-link').textContent === 'http://127.0.0.1/die/?join=' + CODE, 'House shows the group’s invite link');
+function startGame(u) {
+  u.click('[data-act="nav"][data-to="play"]');
+  u.pick('[data-act="pick-slot"][data-t="0"][data-s="0"]', 'jake', 'Jake Miller');
+  u.pick('[data-act="pick-slot"][data-t="0"][data-s="1"]', 'ryan', 'Ryan Cole');
+  u.pick('[data-act="pick-slot"][data-t="1"][data-s="0"]', 'matt', 'Matt Price');
+  u.pick('[data-act="pick-slot"][data-t="1"][data-s="1"]', 'chris', 'Chris Diaz');
+  u.click('[data-act="start-game"]');
+  return u.S.view.id;
+}
+const LIVE1 = startGame(A1);
+const pidOf = (name) => A1.S.players.find(p => p.name === name).id;
+const JK = pidOf('Jake Miller'), MP = pidOf('Matt Price');
+for (let i = 0; i < 7; i++) A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
+A1.click('[data-act="finish"]'); A1.click('[data-act="finish-yes"]');
+await settle();
+ok(srv.games[LIVE1] && srv.games[LIVE1].data.status === 'final' && srv.games[LIVE1].data.stats[JK].pt === 7, 'a finished game is saved to the server, every tap included');
+
+console.log('   — a brother opens the invite link on his phone');
+const A2 = ui(await bootCloud(srv, 'http://127.0.0.1/die/?join=' + CODE));
+ok(/invited to a group/.test(A2.view()), 'the invite survives the sign-in screen');
+A2.click('[data-act="auth-mode"][data-v="up"]');
+A2.submit('form[data-form="auth"]', { email: 'brother@example.com', password: 'secret2' });
+await settle(24);
+ok(A2.S.gid === GID && A2.S.players.length === 4 && A2.S.games.length === 1, 'signing up through the link joins the group and loads its games', { gid: A2.S.gid === GID, players: A2.S.players.length, games: A2.S.games.length });
+const LIVE2 = startGame(A1);
+A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
+await settle();
+ok(A2.S.games.some(g => g.id === LIVE2 && g.stats[JK].pt === 1), 'a tap on one phone shows up on the other, live');
+
+console.log('   — a stranger without the link');
+const A3 = ui(await bootCloud(srv, 'http://127.0.0.1/die/'));
+A3.click('[data-act="auth-mode"][data-v="up"]');
+A3.submit('form[data-form="auth"]', { email: 'stranger@example.com', password: 'secret3' });
+await settle();
+ok(A3.S.groups.length === 0 && /Start a group/.test(A3.view()), 'someone without the invite sees no groups');
+ok(fake.visibleTo(srv, A3.S.me, 'games').length === 0 && fake.visibleTo(srv, A3.S.me, 'players').length === 0, 'and the database hands them no games or players');
+
+console.log('   — no signal in the basement');
+srv.offline = true;
+A1.click(`.tap[data-p="${JK}"][data-k="pt"]`);
+A1.click(`.tap[data-p="${MP}"][data-k="tbl"]`);
+await settle();
+ok(A1.S.offline && /Offline/.test(A1.q('#saving').textContent), 'losing signal shows Offline');
+ok(A1.S.games.find(g => g.id === LIVE2).stats[JK].pt === 2, 'and the taps stay on screen');
+ok((A1.win.localStorage.getItem('plunk.outbox.v1') || '').includes(LIVE2), 'the unsaved game is parked on the phone');
+ok(srv.games[LIVE2].data.stats[JK].pt === 1, 'the server hasn’t seen those taps yet');
+srv.offline = false;
+A1.win.dispatchEvent(new A1.win.Event('online'));
+await settle(24);
+ok(srv.games[LIVE2].data.stats[JK].pt === 2 && srv.games[LIVE2].data.stats[MP].tbl === 1, 'when the signal comes back, the taps save on their own');
+ok(A1.win.localStorage.getItem('plunk.outbox.v1') === '{}' && !A1.S.offline, 'the parked copy is cleared and Offline goes away');
+ok(A2.S.games.find(g => g.id === LIVE2).stats[JK].pt === 2, 'and the other phone catches up');
+
+console.log('   — signing out');
+A1.click('[data-act="nav"][data-to="group"]');
+A1.click('[data-act="sign-out"]');
+await settle();
+ok(A1.S.needAuth && /Sign in to Dice Tracker/.test(A1.view()), 'signing out returns to the sign-in screen');
 
 console.log('\n' + (fail ? 'SOME CHECKS FAILED' : 'ALL SMOKE TESTS PASSED') + ` — ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
